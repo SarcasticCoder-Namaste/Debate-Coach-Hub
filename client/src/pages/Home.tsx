@@ -10,7 +10,8 @@ import {
   Quote, 
   CheckCircle2, 
   Calendar,
-  ArrowRight
+  ArrowRight,
+  GraduationCap
 } from "lucide-react";
 
 export default function Home() {
