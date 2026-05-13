@@ -18,20 +18,54 @@ export const insertInquirySchema = createInsertSchema(inquiries).omit({
 export type Inquiry = typeof inquiries.$inferSelect;
 export type InsertInquiry = z.infer<typeof insertInquirySchema>;
 
-export const turnSchema = z.object({
+export const practiceTurnSchema = z.object({
   role: z.enum(["user", "assistant"]),
   content: z.string(),
+  durationSec: z.number().nonnegative().optional(),
 });
-export type Turn = z.infer<typeof turnSchema>;
+export type PracticeTurn = z.infer<typeof practiceTurnSchema>;
 
-export const feedbackPayloadSchema = z.object({
-  clarity: z.object({ score: z.number(), comment: z.string() }),
-  structure: z.object({ score: z.number(), comment: z.string() }),
-  evidence: z.object({ score: z.number(), comment: z.string() }),
-  delivery: z.object({ score: z.number(), comment: z.string() }),
-  tip: z.string(),
+export const fillerHitSchema = z.object({
+  word: z.string(),
+  timestampSec: z.number().nonnegative(),
+  turnIndex: z.number().int().nonnegative(),
 });
-export type FeedbackPayload = z.infer<typeof feedbackPayloadSchema>;
+export type FillerHit = z.infer<typeof fillerHitSchema>;
+
+export const subscoreSchema = z.object({
+  score: z.number().min(0).max(100),
+  comment: z.string(),
+  suggestion: z.string(),
+});
+export type Subscore = z.infer<typeof subscoreSchema>;
+
+export const feedbackReportSchema = z.object({
+  overallScore: z.number().min(0).max(100),
+  strengths: z.array(z.string()),
+  weaknesses: z.array(z.string()),
+  metrics: z.object({
+    wpm: z.number().nonnegative(),
+    durationSec: z.number().nonnegative(),
+    wordCount: z.number().int().nonnegative(),
+    fillerCount: z.number().int().nonnegative(),
+    fillers: z.array(fillerHitSchema),
+  }),
+  subscores: z.object({
+    clarity: subscoreSchema,
+    pace: subscoreSchema,
+    fillers: subscoreSchema,
+    structure: subscoreSchema,
+    rebuttal: subscoreSchema,
+  }),
+  rfd: z
+    .object({
+      decision: z.enum(["Aff", "Neg"]),
+      reason: z.string(),
+      keyVoters: z.array(z.string()).max(5),
+    })
+    .optional(),
+});
+export type FeedbackReport = z.infer<typeof feedbackReportSchema>;
 
 export const practiceShares = pgTable("practice_shares", {
   id: text("id").primaryKey(),
@@ -41,15 +75,15 @@ export const practiceShares = pgTable("practice_shares", {
   topic: text("topic").notNull(),
   side: text("side").notNull(),
   format: text("format").notNull(),
-  transcript: jsonb("transcript").$type<Turn[]>().notNull(),
-  feedback: jsonb("feedback").$type<FeedbackPayload | null>(),
+  transcript: jsonb("transcript").$type<PracticeTurn[]>().notNull(),
+  feedback: jsonb("feedback").$type<FeedbackReport | null>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   expiresAt: timestamp("expires_at"),
 });
 
 export const insertPracticeShareSchema = createInsertSchema(practiceShares, {
-  transcript: z.array(turnSchema).min(1),
-  feedback: feedbackPayloadSchema.nullable().optional(),
+  transcript: z.array(practiceTurnSchema).min(1),
+  feedback: feedbackReportSchema.nullable().optional(),
 }).omit({ createdAt: true });
 
 export type PracticeShare = typeof practiceShares.$inferSelect;

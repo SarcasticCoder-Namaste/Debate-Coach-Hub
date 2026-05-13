@@ -8,11 +8,7 @@ import type {
 import { openai, ensureCompatibleFormat, speechToText } from "./replit_integrations/audio/client";
 import { ObjectStorageService, ObjectNotFoundError } from "./replit_integrations/object_storage";
 import { storage } from "./storage";
-import {
-  feedbackPayloadSchema,
-  insertPracticeShareSchema,
-  turnSchema,
-} from "@shared/schema";
+import { insertPracticeShareSchema } from "@shared/schema";
 import {
   checkPracticeMinutes,
   recordPracticeMinutes,
@@ -87,12 +83,21 @@ const packetContextSchema = z.object({
   excerpt: z.string().max(8_000),
 });
 
-const FEEDBACK_SCHEMA = z.object({
-  clarity: z.object({ score: z.number().min(1).max(10), comment: z.string() }),
-  structure: z.object({ score: z.number().min(1).max(10), comment: z.string() }),
-  evidence: z.object({ score: z.number().min(1).max(10), comment: z.string() }),
-  delivery: z.object({ score: z.number().min(1).max(10), comment: z.string() }),
-  tip: z.string(),
+import {
+  practiceTurnSchema,
+  feedbackReportSchema,
+  type FillerHit,
+  type FeedbackReport,
+} from "@shared/schema";
+
+const turnSchema = practiceTurnSchema;
+
+const SUBSCORE_LLM_SCHEMA = z.object({
+  clarity: z.object({ score: z.number(), comment: z.string(), suggestion: z.string() }),
+  structure: z.object({ score: z.number(), comment: z.string(), suggestion: z.string() }),
+  rebuttal: z.object({ score: z.number(), comment: z.string(), suggestion: z.string() }),
+  strengths: z.array(z.string()).min(1).max(4),
+  weaknesses: z.array(z.string()).min(1).max(4),
   rfd: z
     .object({
       decision: z.enum(["Aff", "Neg"]),
@@ -102,32 +107,147 @@ const FEEDBACK_SCHEMA = z.object({
     .optional(),
 });
 
-const FEEDBACK_PROMPT_BASIC = `You are a debate coach giving structured feedback on a student's practice round.
-Return ONLY JSON matching this schema, no prose:
-{
-  "clarity": { "score": 1-10, "comment": "one short sentence" },
-  "structure": { "score": 1-10, "comment": "one short sentence" },
-  "evidence": { "score": 1-10, "comment": "one short sentence" },
-  "delivery": { "score": 1-10, "comment": "one short sentence" },
-  "tip": "one actionable improvement tip in <= 25 words"
-}
-Be honest and specific. Base scores on the student's turns only, not the bot's.`;
+const FEEDBACK_PROMPT = `You are a debate coach giving structured, honest feedback on a student's practice round.
+You will receive: the resolution, the student's side, and the round transcript labeled by speaker.
+Score ONLY the student's speeches. Be specific and reference what they actually said.
 
-const FEEDBACK_PROMPT_JUDGE = `You are an experienced competitive debate JUDGE writing a Reason For Decision after a practice round.
-Return ONLY JSON matching this schema, no prose:
+Return ONLY JSON matching exactly this schema, no prose:
 {
-  "clarity": { "score": 1-10, "comment": "one short sentence" },
-  "structure": { "score": 1-10, "comment": "one short sentence" },
-  "evidence": { "score": 1-10, "comment": "one short sentence" },
-  "delivery": { "score": 1-10, "comment": "one short sentence" },
-  "tip": "one actionable improvement tip in <= 25 words",
+  "clarity": { "score": 0-100, "comment": "1-2 sentences", "suggestion": "one concrete improvement tip" },
+  "structure": { "score": 0-100, "comment": "1-2 sentences on argument structure / framework / signposting", "suggestion": "one concrete improvement tip" },
+  "rebuttal": { "score": 0-100, "comment": "1-2 sentences on how they engaged the opponent's arguments", "suggestion": "one concrete improvement tip" },
+  "strengths": ["1-3 short bullets"],
+  "weaknesses": ["1-3 short bullets"]
+}`;
+
+const FEEDBACK_PROMPT_JUDGE = `${FEEDBACK_PROMPT}
+
+Additionally, because the user has enabled JUDGE MODE, also include a Reason For Decision field "rfd" in the JSON, decisively picking a winning side based on the flow as written:
+{
   "rfd": {
     "decision": "Aff" | "Neg",
     "reason": "2-4 sentence judge's RFD explaining why that side won, citing flow",
     "keyVoters": ["short voter 1", "short voter 2", "short voter 3"]
   }
 }
-Judge the round on the flow as written. Be decisive — pick a winner.`;
+Be decisive — pick a winner.`;
+
+/* ---------- metric helpers (deterministic, computed server-side) ---------- */
+const FILLER_PATTERNS: Array<{ word: string; re: RegExp }> = [
+  { word: "um", re: /\bu+m+\b/gi },
+  { word: "uh", re: /\bu+h+\b/gi },
+  { word: "like", re: /\blike\b/gi },
+  { word: "you know", re: /\byou know\b/gi },
+];
+
+function countWords(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function extractFillers(turns: Array<{ content: string; durationSec?: number }>): {
+  fillers: FillerHit[];
+  totalWords: number;
+  totalDuration: number;
+} {
+  const fillers: FillerHit[] = [];
+  let totalWords = 0;
+  let totalDuration = 0;
+
+  turns.forEach((turn, turnIndex) => {
+    const text = turn.content;
+    const words = text.trim().split(/\s+/).filter(Boolean);
+    const wordCount = words.length;
+    const dur = turn.durationSec && turn.durationSec > 0 ? turn.durationSec : Math.max(1, wordCount / 2.5);
+    totalWords += wordCount;
+    totalDuration += dur;
+
+    for (const { word, re } of FILLER_PATTERNS) {
+      re.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(text)) !== null) {
+        const charIdx = m.index;
+        const before = text.slice(0, charIdx).trim();
+        const wordPos = before ? before.split(/\s+/).length : 0;
+        const ts = wordCount > 0 ? (wordPos / wordCount) * dur : 0;
+        fillers.push({
+          word,
+          timestampSec: Math.round(ts * 10) / 10,
+          turnIndex,
+        });
+      }
+    }
+  });
+
+  fillers.sort((a, b) =>
+    a.turnIndex === b.turnIndex ? a.timestampSec - b.timestampSec : a.turnIndex - b.turnIndex,
+  );
+  return { fillers, totalWords, totalDuration };
+}
+
+function paceSubscore(wpm: number) {
+  // Ideal conversational debate pace ~140-180 wpm.
+  let score: number;
+  let comment: string;
+  let suggestion: string;
+  if (wpm === 0) {
+    score = 0;
+    comment = "Couldn't measure your pace — the round was too short.";
+    suggestion = "Deliver a longer speech (at least 30 seconds) so pace can be measured.";
+  } else if (wpm < 110) {
+    score = Math.max(40, 100 - (140 - wpm) * 1.2);
+    comment = `Your pace of ${wpm} words/min is on the slow side, which can lose the judge's attention.`;
+    suggestion = "Aim for 140-170 wpm — practice reading a passage aloud at a brisk but clear pace.";
+  } else if (wpm > 200) {
+    score = Math.max(40, 100 - (wpm - 180) * 0.9);
+    comment = `Your pace of ${wpm} words/min is fast — clarity may suffer at this speed.`;
+    suggestion = "Slow down on tag lines and key warrants; sprint only through cited evidence.";
+  } else {
+    score = Math.round(100 - Math.abs(160 - wpm) * 0.6);
+    comment = `Your pace of ${wpm} words/min is in the ideal conversational range.`;
+    suggestion = "Hold this tempo, and vary it slightly to emphasize key arguments.";
+  }
+  return { score: Math.max(0, Math.min(100, Math.round(score))), comment, suggestion };
+}
+
+function fillerSubscore(fillerCount: number, totalWords: number) {
+  const per100 = totalWords > 0 ? (fillerCount / totalWords) * 100 : 0;
+  let score: number;
+  let comment: string;
+  let suggestion: string;
+  if (totalWords === 0) {
+    score = 0;
+    comment = "No speech to analyze for filler words yet.";
+    suggestion = "Deliver a full speech to get a filler-word readout.";
+  } else if (fillerCount === 0) {
+    score = 100;
+    comment = "Zero filler words — extremely clean delivery.";
+    suggestion = "Keep practicing pause-instead-of-filler to lock this in.";
+  } else if (per100 <= 1) {
+    score = 90;
+    comment = `Only ${fillerCount} filler word${fillerCount === 1 ? "" : "s"} across your speech — very clean.`;
+    suggestion = "Replace any remaining fillers with a deliberate half-second pause.";
+  } else if (per100 <= 3) {
+    score = 75;
+    comment = `${fillerCount} filler words (about ${per100.toFixed(1)} per 100 words) — noticeable but not distracting.`;
+    suggestion = "Mark transition points in your flow and breathe instead of saying 'um' or 'like'.";
+  } else if (per100 <= 6) {
+    score = 55;
+    comment = `${fillerCount} filler words (${per100.toFixed(1)} per 100) — judges will start to notice.`;
+    suggestion = "Record yourself and re-deliver, consciously pausing where each filler appears.";
+  } else {
+    score = 35;
+    comment = `${fillerCount} filler words (${per100.toFixed(1)} per 100) — significantly hurts your delivery.`;
+    suggestion = "Slow your pace and rehearse from a brief outline so you have less reason to stall.";
+  }
+  return { score, comment, suggestion };
+}
+
+function computeOverall(subs: Record<string, { score: number }>): number {
+  const weights = { clarity: 0.2, pace: 0.15, fillers: 0.15, structure: 0.25, rebuttal: 0.25 };
+  let total = 0;
+  for (const [k, w] of Object.entries(weights)) total += (subs[k]?.score ?? 0) * w;
+  return Math.round(total);
+}
 
 const transcribeSchema = z.object({ audio: z.string().min(1) });
 
@@ -274,7 +394,7 @@ const initShareSchema = z.object({
 });
 
 const finalizeShareSchema = insertPracticeShareSchema.extend({
-  feedback: feedbackPayloadSchema.nullable().optional(),
+  feedback: feedbackReportSchema.nullable().optional(),
   uploadToken: z.string().min(10),
 });
 
@@ -482,7 +602,7 @@ export function registerPracticeRoutes(app: Express) {
     }
   });
 
-  // Structured feedback card. Basic scoring is available on Free; the
+  // Structured scorecard + written feedback from the round transcript.
   // Judge-mode RFD output is gated behind the Pro/Team `judgeMode` feature.
   app.post("/api/practice/feedback", async (req: Request, res: Response) => {
     const parsed = feedbackSchema.safeParse(req.body);
@@ -497,10 +617,31 @@ export function registerPracticeRoutes(app: Express) {
           .json({ error: gate.message, code: gate.code });
       }
     }
-    const systemPrompt = judgeMode
-      ? FEEDBACK_PROMPT_JUDGE
-      : FEEDBACK_PROMPT_BASIC;
+    const systemPrompt = judgeMode ? FEEDBACK_PROMPT_JUDGE : FEEDBACK_PROMPT;
 
+    const userTurns = transcript.filter((t) => t.role === "user");
+    const userWords = userTurns.reduce((acc, t) => acc + countWords(t.content), 0);
+    if (userTurns.length === 0 || userWords < 15) {
+      return res.status(422).json({
+        error: "Round too short to score. Speak for at least a few sentences before requesting feedback.",
+      });
+    }
+
+    // Map original transcript indices for filler turnIndex
+    const userTurnIndices: number[] = [];
+    transcript.forEach((t, i) => { if (t.role === "user") userTurnIndices.push(i); });
+
+    const { fillers: localFillers, totalWords, totalDuration } = extractFillers(userTurns);
+    const fillers: FillerHit[] = localFillers.map((f) => ({
+      ...f,
+      turnIndex: userTurnIndices[f.turnIndex] ?? f.turnIndex,
+    }));
+    const wpm = totalDuration > 0 ? Math.round((totalWords / totalDuration) * 60) : 0;
+
+    const pace = paceSubscore(wpm);
+    const fillerSub = fillerSubscore(fillers.length, totalWords);
+
+    let llmResult: z.infer<typeof SUBSCORE_LLM_SCHEMA>;
     try {
       const convo = transcript
         .map((t) => `${t.role === "user" ? "Student" : "Opponent"}: ${t.content}`)
@@ -525,16 +666,46 @@ export function registerPracticeRoutes(app: Express) {
       } catch {
         return res.status(502).json({ error: "Model returned invalid JSON" });
       }
-
-      const validated = FEEDBACK_SCHEMA.safeParse(parsedJson);
+      const validated = SUBSCORE_LLM_SCHEMA.safeParse(parsedJson);
       if (!validated.success) {
         return res.status(502).json({ error: "Feedback did not match expected shape" });
       }
-      res.json(validated.data);
+      llmResult = validated.data;
     } catch (err) {
       console.error("feedback error", err);
-      res.status(500).json({ error: "Feedback generation failed" });
+      return res.status(500).json({ error: "Feedback generation failed" });
     }
+
+    const clamp100 = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
+    const subscores = {
+      clarity: { ...llmResult.clarity, score: clamp100(llmResult.clarity.score) },
+      pace,
+      fillers: fillerSub,
+      structure: { ...llmResult.structure, score: clamp100(llmResult.structure.score) },
+      rebuttal: { ...llmResult.rebuttal, score: clamp100(llmResult.rebuttal.score) },
+    };
+    const overallScore = computeOverall(subscores);
+
+    const report: FeedbackReport = {
+      overallScore,
+      strengths: llmResult.strengths,
+      weaknesses: llmResult.weaknesses,
+      metrics: {
+        wpm,
+        durationSec: Math.round(totalDuration),
+        wordCount: totalWords,
+        fillerCount: fillers.length,
+        fillers,
+      },
+      subscores,
+      ...(judgeMode && llmResult.rfd ? { rfd: llmResult.rfd } : {}),
+    };
+
+    const finalCheck = feedbackReportSchema.safeParse(report);
+    if (!finalCheck.success) {
+      return res.status(500).json({ error: "Failed to assemble report" });
+    }
+    res.json(finalCheck.data);
   });
 
   /* ------------------ Shareable practice clips ------------------ */

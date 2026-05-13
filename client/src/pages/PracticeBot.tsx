@@ -16,16 +16,18 @@ import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import {
   Mic, MicOff, Video, VideoOff, Loader2, Sparkles, Download,
-  Volume2, RotateCcw, ArrowLeft, Send, AlertTriangle, Star, Gavel,
+  Volume2, RotateCcw, ArrowLeft, Send, AlertTriangle, Gavel,
   FileText, Upload, X, BookOpen,
   Share2, Copy, Check,
   ChevronDown, ChevronUp, Clock, Lightbulb, Timer, Pause, Play,
+  TrendingUp, ThumbsUp, AlertCircle, Gauge, MessageSquare, Layers, Target, Zap,
 } from "lucide-react";
 import { Paywall, useFeatureAccess } from "@/components/Paywall";
+import type { FeedbackReport } from "@shared/schema";
 
 type Side = "Aff" | "Neg";
 type FormatKey = "LD" | "PF" | "Policy" | "Parli" | "Congress" | "Worlds";
-type Turn = { role: "user" | "assistant"; content: string };
+type Turn = { role: "user" | "assistant"; content: string; durationSec?: number };
 
 interface SpeechRecognitionAlternativeLike {
   transcript: string;
@@ -70,14 +72,7 @@ type PacketContext = {
 };
 type PacketStats = { characters: number; truncated: boolean; source: "pdf" | "docx" | "text" };
 
-type Feedback = {
-  clarity?: { score: number; comment: string };
-  structure?: { score: number; comment: string };
-  evidence?: { score: number; comment: string };
-  delivery?: { score: number; comment: string };
-  tip?: string;
-  rfd?: { decision: "Aff" | "Neg"; reason: string; keyVoters: string[] };
-};
+type Feedback = FeedbackReport;
 
 const FALLBACK_TOPICS = [
   "Resolved: The United States ought to provide a universal basic income.",
@@ -136,26 +131,53 @@ function Pulse({ active }: { active: boolean }) {
   );
 }
 
-function ScoreRow({ label, item }: { label: string; item?: { score: number; comment: string } }) {
-  if (!item) return null;
+function scoreColor(score: number): string {
+  if (score >= 80) return "text-emerald-600 dark:text-emerald-400";
+  if (score >= 65) return "text-accent";
+  if (score >= 50) return "text-amber-600 dark:text-amber-400";
+  return "text-red-600 dark:text-red-400";
+}
+
+function SubScoreRow({
+  label,
+  icon: Icon,
+  item,
+  metricLabel,
+  testId,
+}: {
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  item: { score: number; comment: string; suggestion: string };
+  metricLabel?: string;
+  testId: string;
+}) {
   return (
-    <div data-testid={`feedback-${label.toLowerCase()}`}>
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-sm font-semibold text-foreground">{label}</span>
-        <div className="flex items-center gap-1">
-          <Star className="w-3.5 h-3.5 text-accent fill-accent" />
-          <span className="text-sm font-bold text-accent">{item.score}/10</span>
+    <div data-testid={testId} className="space-y-1.5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <Icon className="w-4 h-4 text-primary flex-shrink-0" />
+          <span className="text-sm font-semibold text-foreground truncate">{label}</span>
+          {metricLabel && (
+            <span className="text-xs text-muted-foreground whitespace-nowrap">· {metricLabel}</span>
+          )}
         </div>
+        <span className={`text-sm font-bold ${scoreColor(item.score)}`} data-testid={`${testId}-score`}>
+          {item.score}
+          <span className="text-xs text-muted-foreground font-normal">/100</span>
+        </span>
       </div>
-      <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden mb-1.5">
+      <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
         <motion.div
           initial={{ width: 0 }}
-          animate={{ width: `${item.score * 10}%` }}
+          animate={{ width: `${item.score}%` }}
           transition={{ duration: 0.8, ease: "easeOut" }}
           className="h-full bg-gradient-to-r from-primary to-accent rounded-full"
         />
       </div>
       <p className="text-xs text-muted-foreground leading-relaxed">{item.comment}</p>
+      <p className="text-xs text-foreground/80 leading-relaxed">
+        <span className="font-semibold text-accent">Try:</span> {item.suggestion}
+      </p>
     </div>
   );
 }
@@ -234,6 +256,9 @@ export default function PracticeBot() {
   const videoMimeRef = useRef<string>("");
   const speechRecRef = useRef<SpeechRecognitionLike | null>(null);
   const speechFinalRef = useRef<string>("");
+  const turnStartRef = useRef<number>(0);
+  const lastTurnDurationRef = useRef<number>(0);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
 
   const activeTopic = customTopic.trim() || topic;
 
@@ -421,6 +446,7 @@ export default function PracticeBot() {
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       recorder.start(250);
       startLiveTranscript();
+      turnStartRef.current = Date.now();
       setRecording(true);
     } catch (err: any) {
       setPermissionError(
@@ -444,6 +470,9 @@ export default function PracticeBot() {
     recorder.stop();
     const blob = await finished;
     const liveText = stopLiveTranscript();
+    lastTurnDurationRef.current = turnStartRef.current
+      ? Math.max(1, (Date.now() - turnStartRef.current) / 1000)
+      : 0;
 
     // Save replayable video / audio
     if (blob.size > 0) {
@@ -493,7 +522,13 @@ export default function PracticeBot() {
   /* ---------- send turn (audio or text) ---------- */
   async function sendUserTurn(userText: string) {
     setProcessing(true);
-    const nextHistory: Turn[] = [...history, { role: "user", content: userText }];
+    setFeedbackError(null);
+    const dur = lastTurnDurationRef.current;
+    lastTurnDurationRef.current = 0;
+    const nextHistory: Turn[] = [
+      ...history,
+      { role: "user", content: userText, durationSec: dur > 0 ? dur : undefined },
+    ];
     setHistory(nextHistory);
 
     try {
@@ -536,6 +571,7 @@ export default function PracticeBot() {
   async function getFeedback() {
     if (history.length === 0) return;
     setFeedbackLoading(true);
+    setFeedbackError(null);
     try {
       const useJudge = judgeMode && judgeAllowed;
       const res = await fetch("/api/practice/feedback", {
@@ -551,19 +587,31 @@ export default function PracticeBot() {
       });
       if (res.status === 402 || res.status === 403) {
         const body = await res.json().catch(() => ({}));
+        const msg = body?.error ?? "This feature is part of a paid plan.";
+        setFeedbackError(msg);
         toast({
           title: "Upgrade required",
-          description:
-            body?.error ?? "This feature is part of a paid plan.",
+          description: msg,
           variant: "destructive",
         });
         return;
       }
-      if (!res.ok) throw new Error("feedback failed");
+      if (!res.ok) {
+        let msg = "We couldn't generate a report. Please try again in a moment.";
+        try {
+          const body = await res.json();
+          if (body?.error && typeof body.error === "string") msg = body.error;
+        } catch {}
+        setFeedbackError(msg);
+        toast({ title: "Feedback unavailable", description: msg, variant: "destructive" });
+        return;
+      }
       const data = (await res.json()) as Feedback;
       setFeedback(data);
     } catch {
-      toast({ title: "Feedback unavailable", description: "Please try again.", variant: "destructive" });
+      const msg = "Network error while generating your report. Please try again.";
+      setFeedbackError(msg);
+      toast({ title: "Feedback unavailable", description: msg, variant: "destructive" });
     } finally {
       setFeedbackLoading(false);
     }
@@ -660,6 +708,7 @@ export default function PracticeBot() {
   function resetRound() {
     setHistory([]);
     setFeedback(null);
+    setFeedbackError(null);
     setLiveTranscript("");
     speechFinalRef.current = "";
     if (videoUrl) { URL.revokeObjectURL(videoUrl); setVideoUrl(null); }
@@ -759,6 +808,12 @@ export default function PracticeBot() {
     } catch {
       toast({ title: "Copy failed", description: "Select and copy the link manually.", variant: "destructive" });
     }
+  }
+
+  function formatTimestamp(turnIndex: number, sec: number): string {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `Turn ${turnIndex + 1} · ${m}:${s.toString().padStart(2, "0")}`;
   }
 
   /* ---------- render ---------- */
@@ -1497,28 +1552,169 @@ export default function PracticeBot() {
             </Button>
           </Card>
 
+          {feedbackError && !feedback && (
+            <Card className="p-4 border-destructive/40 bg-destructive/5" data-testid="card-feedback-error">
+              <div className="flex items-start gap-2 text-sm text-foreground">
+                <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+                <span>{feedbackError}</span>
+              </div>
+            </Card>
+          )}
+
           {feedback && (
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4 }}
             >
-              <Card className="p-6 border-accent/40" data-testid="card-feedback">
-                <h3 className="font-display text-lg font-bold text-primary mb-4 flex items-center gap-2">
-                  <Volume2 className="w-5 h-5 text-accent" /> Coach Feedback
-                </h3>
-                <div className="space-y-4">
-                  <ScoreRow label="Clarity" item={feedback.clarity} />
-                  <ScoreRow label="Structure" item={feedback.structure} />
-                  <ScoreRow label="Evidence" item={feedback.evidence} />
-                  <ScoreRow label="Delivery" item={feedback.delivery} />
-                </div>
-                {feedback.tip && (
-                  <div className="mt-5 pt-4 border-t border-border bg-primary/5 -mx-6 px-6 py-3">
-                    <div className="text-[10px] uppercase tracking-wider font-bold text-accent mb-1">
-                      Coach's Tip
+              <Card className="overflow-hidden border-accent/40" data-testid="card-feedback">
+                {/* Header: overall score */}
+                <div className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider font-bold text-white/70 mb-1">
+                        Overall Score
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span
+                          className="text-5xl font-display font-bold text-white"
+                          data-testid="text-overall-score"
+                        >
+                          {feedback.overallScore}
+                        </span>
+                        <span className="text-lg text-white/60 font-semibold">/100</span>
+                      </div>
                     </div>
-                    <p className="text-sm text-foreground" data-testid="text-feedback-tip">{feedback.tip}</p>
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/20">
+                      <Volume2 className="w-4 h-4 text-accent" />
+                      <span className="text-xs font-semibold">Coach Report</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mt-5 text-center">
+                    <div className="bg-white/10 rounded-lg py-2">
+                      <div className="text-[10px] uppercase tracking-wider text-white/60">Pace</div>
+                      <div className="text-lg font-bold text-white" data-testid="text-metric-wpm">
+                        {feedback.metrics.wpm}
+                      </div>
+                      <div className="text-[10px] text-white/60">wpm</div>
+                    </div>
+                    <div className="bg-white/10 rounded-lg py-2">
+                      <div className="text-[10px] uppercase tracking-wider text-white/60">Words</div>
+                      <div className="text-lg font-bold text-white" data-testid="text-metric-words">
+                        {feedback.metrics.wordCount}
+                      </div>
+                      <div className="text-[10px] text-white/60">spoken</div>
+                    </div>
+                    <div className="bg-white/10 rounded-lg py-2">
+                      <div className="text-[10px] uppercase tracking-wider text-white/60">Fillers</div>
+                      <div className="text-lg font-bold text-white" data-testid="text-metric-fillers">
+                        {feedback.metrics.fillerCount}
+                      </div>
+                      <div className="text-[10px] text-white/60">caught</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Strengths / Weaknesses */}
+                <div className="grid sm:grid-cols-2 gap-px bg-border">
+                  <div className="bg-card p-4" data-testid="block-strengths">
+                    <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-2">
+                      <ThumbsUp className="w-3.5 h-3.5" /> Strengths
+                    </div>
+                    <ul className="space-y-1.5">
+                      {feedback.strengths.map((s, i) => (
+                        <li
+                          key={i}
+                          data-testid={`text-strength-${i}`}
+                          className="text-xs text-foreground/90 leading-relaxed flex gap-1.5"
+                        >
+                          <span className="text-emerald-500 mt-0.5">✓</span>
+                          <span>{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="bg-card p-4" data-testid="block-weaknesses">
+                    <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-2">
+                      <TrendingUp className="w-3.5 h-3.5" /> Areas to work on
+                    </div>
+                    <ul className="space-y-1.5">
+                      {feedback.weaknesses.map((w, i) => (
+                        <li
+                          key={i}
+                          data-testid={`text-weakness-${i}`}
+                          className="text-xs text-foreground/90 leading-relaxed flex gap-1.5"
+                        >
+                          <span className="text-amber-500 mt-0.5">→</span>
+                          <span>{w}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Sub-scores */}
+                <div className="p-6 space-y-5">
+                  <SubScoreRow
+                    label="Clarity"
+                    icon={MessageSquare}
+                    item={feedback.subscores.clarity}
+                    testId="feedback-clarity"
+                  />
+                  <SubScoreRow
+                    label="Pace"
+                    icon={Gauge}
+                    item={feedback.subscores.pace}
+                    metricLabel={`${feedback.metrics.wpm} wpm`}
+                    testId="feedback-pace"
+                  />
+                  <SubScoreRow
+                    label="Filler words"
+                    icon={Zap}
+                    item={feedback.subscores.fillers}
+                    metricLabel={`${feedback.metrics.fillerCount} found`}
+                    testId="feedback-fillers"
+                  />
+                  <SubScoreRow
+                    label="Argument structure"
+                    icon={Layers}
+                    item={feedback.subscores.structure}
+                    testId="feedback-structure"
+                  />
+                  <SubScoreRow
+                    label="Rebuttal quality"
+                    icon={Target}
+                    item={feedback.subscores.rebuttal}
+                    testId="feedback-rebuttal"
+                  />
+                </div>
+
+                {/* Filler chips */}
+                {feedback.metrics.fillers.length > 0 && (
+                  <div className="px-6 pb-6" data-testid="block-filler-chips">
+                    <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
+                      <AlertCircle className="w-3.5 h-3.5" /> Filler-word timeline
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {feedback.metrics.fillers.slice(0, 24).map((f, i) => (
+                        <span
+                          key={i}
+                          data-testid={`chip-filler-${i}`}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-900"
+                          title={formatTimestamp(f.turnIndex, f.timestampSec)}
+                        >
+                          <span className="font-semibold">"{f.word}"</span>
+                          <span className="text-[10px] opacity-70">
+                            {formatTimestamp(f.turnIndex, f.timestampSec)}
+                          </span>
+                        </span>
+                      ))}
+                      {feedback.metrics.fillers.length > 24 && (
+                        <span className="text-[11px] text-muted-foreground self-center">
+                          +{feedback.metrics.fillers.length - 24} more
+                        </span>
+                      )}
+                    </div>
                   </div>
                 )}
                 {feedback.rfd && (
