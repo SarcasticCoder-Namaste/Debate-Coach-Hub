@@ -18,6 +18,33 @@ export const insertInquirySchema = createInsertSchema(inquiries).omit({
 export type Inquiry = typeof inquiries.$inferSelect;
 export type InsertInquiry = z.infer<typeof insertInquirySchema>;
 
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  name: text("name"),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+
+export const signupSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6),
+  name: z.string().min(1).optional(),
+});
+
+export const signinSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
+
 export const practiceTurnSchema = z.object({
   role: z.enum(["user", "assistant"]),
   content: z.string(),
@@ -66,6 +93,45 @@ export const feedbackReportSchema = z.object({
     .optional(),
 });
 export type FeedbackReport = z.infer<typeof feedbackReportSchema>;
+
+// Back-compat aliases retained so older share/round code keeps compiling.
+// Practice rounds and shares both store the canonical FeedbackReport now.
+export const practiceFeedbackSchema = feedbackReportSchema;
+export type PracticeFeedback = FeedbackReport;
+export const turnSchema = practiceTurnSchema;
+export type Turn = PracticeTurn;
+export const feedbackPayloadSchema = feedbackReportSchema;
+export type FeedbackPayload = FeedbackReport;
+
+export const practiceRounds = pgTable("practice_rounds", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  topic: text("topic").notNull(),
+  side: text("side").notNull(),
+  format: text("format").notNull(),
+  transcript: jsonb("transcript").$type<PracticeTurn[]>().notNull(),
+  feedback: jsonb("feedback").$type<FeedbackReport | null>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertPracticeRoundSchema = createInsertSchema(practiceRounds).omit({
+  id: true,
+  createdAt: true,
+  userId: true,
+});
+
+export type PracticeRound = typeof practiceRounds.$inferSelect;
+export type InsertPracticeRound = z.infer<typeof insertPracticeRoundSchema>;
+
+export const savePracticeRoundSchema = z.object({
+  topic: z.string().min(1),
+  side: z.enum(["Aff", "Neg"]),
+  format: z.string().min(1),
+  transcript: z.array(practiceTurnSchema).min(1),
+  feedback: feedbackReportSchema.nullable().optional(),
+});
 
 export const practiceShares = pgTable("practice_shares", {
   id: text("id").primaryKey(),

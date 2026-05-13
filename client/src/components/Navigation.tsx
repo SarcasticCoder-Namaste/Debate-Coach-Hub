@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Menu, X, GraduationCap, Sun, Moon, Monitor, LogIn, Mic, Library, Tag, Crown, Search, LayoutDashboard } from "lucide-react";
+import { Menu, X, GraduationCap, Sun, Moon, Monitor, LogIn, LogOut, Mic, Library, History as HistoryIcon, Tag, Crown, Search, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/ThemeProvider";
 import { Link, useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
 import { useCurrentSubscription } from "@/lib/plan";
 
 export function Navigation() {
@@ -10,6 +11,7 @@ export function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { theme, setTheme, resolved } = useTheme();
   const [location, navigate] = useLocation();
+  const { user, signOut } = useAuth();
   const onHome = location === "/";
   const { plan, subscription } = useCurrentSubscription();
   const onPaidPlan = subscription?.status === "active" && plan.id !== "free";
@@ -167,6 +169,20 @@ export function Navigation() {
             </Link>
           )}
 
+          {user && (
+            <Link
+              href="/history"
+              data-testid="nav-link-history"
+              className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors ${
+                isDarkHero
+                  ? "text-white/90 hover:text-white"
+                  : "text-foreground/80 hover:text-foreground"
+              }`}
+            >
+              <HistoryIcon className="w-3.5 h-3.5" /> My History
+            </Link>
+          )}
+
           {/* Theme Toggle */}
           <div className="flex items-center gap-1 rounded-full bg-muted p-1 border border-border">
             <button
@@ -198,16 +214,29 @@ export function Navigation() {
             </button>
           </div>
 
-          <Link
-            href="/signin"
-            data-testid="link-signin"
-            className={`text-sm font-medium hover:text-accent transition-colors flex items-center gap-1.5 ${
-              isDarkHero ? "text-white/90 hover:text-white" : "text-foreground/80 hover:text-foreground"
-            }`}
-          >
-            <LogIn className="w-4 h-4" />
-            Sign In
-          </Link>
+          {user ? (
+            <button
+              onClick={() => signOut.mutate()}
+              data-testid="button-signout"
+              className={`text-sm font-medium hover:text-accent transition-colors flex items-center gap-1.5 ${
+                isDarkHero ? "text-white/90 hover:text-white" : "text-foreground/80 hover:text-foreground"
+              }`}
+            >
+              <LogOut className="w-4 h-4" />
+              Sign Out
+            </button>
+          ) : (
+            <Link
+              href="/signin"
+              data-testid="link-signin"
+              className={`text-sm font-medium hover:text-accent transition-colors flex items-center gap-1.5 ${
+                isDarkHero ? "text-white/90 hover:text-white" : "text-foreground/80 hover:text-foreground"
+              }`}
+            >
+              <LogIn className="w-4 h-4" />
+              Sign In
+            </Link>
+          )}
 
           <Button
             data-testid="button-start-free"
@@ -329,15 +358,36 @@ export function Navigation() {
               </span>
             )}
           </Link>
-          <Link
-            href="/signin"
-            data-testid="link-mobile-signin"
-            onClick={() => setMobileMenuOpen(false)}
-            className="w-full mt-2 inline-flex items-center justify-center h-10 rounded-md border border-border bg-background text-foreground text-sm font-medium hover:bg-muted transition-colors"
-          >
-            <LogIn className="w-4 h-4 mr-2" />
-            Sign In
-          </Link>
+          {user && (
+            <Link
+              href="/history"
+              data-testid="button-nav-history"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-2 text-left text-lg font-medium text-foreground py-2 border-b border-border/50"
+            >
+              <HistoryIcon className="w-4 h-4" /> My History
+            </Link>
+          )}
+          {user ? (
+            <button
+              onClick={() => { setMobileMenuOpen(false); signOut.mutate(); }}
+              data-testid="button-mobile-signout"
+              className="w-full mt-2 inline-flex items-center justify-center h-10 rounded-md border border-border bg-background text-foreground text-sm font-medium hover:bg-muted transition-colors"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
+            </button>
+          ) : (
+            <Link
+              href="/signin"
+              data-testid="link-mobile-signin"
+              onClick={() => setMobileMenuOpen(false)}
+              className="w-full mt-2 inline-flex items-center justify-center h-10 rounded-md border border-border bg-background text-foreground text-sm font-medium hover:bg-muted transition-colors"
+            >
+              <LogIn className="w-4 h-4 mr-2" />
+              Sign In
+            </Link>
+          )}
           <Button
             data-testid="button-book-session"
             className="w-full bg-accent text-white shadow-lg shadow-accent/25"

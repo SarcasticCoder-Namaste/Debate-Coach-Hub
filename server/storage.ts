@@ -3,6 +3,8 @@ import {
   practiceShares,
   subscriptions,
   researchBundles,
+  users,
+  practiceRounds,
   type InsertInquiry,
   type Inquiry,
   type InsertPracticeShare,
@@ -10,6 +12,11 @@ import {
   type Subscription,
   type InsertResearchBundle,
   type ResearchBundleRow,
+  type User,
+  type InsertUser,
+  type PracticeRound,
+  type InsertPracticeRound,
+  type PracticeFeedback,
 } from "@shared/schema";
 import { db } from "./db";
 import { and, eq, lt, desc, isNull } from "drizzle-orm";
@@ -39,6 +46,14 @@ export interface IStorage {
   getResearch(id: number): Promise<ResearchBundleRow | undefined>;
   listResearch(userId?: string | null): Promise<ResearchBundleRow[]>;
   deleteResearch(id: number): Promise<void>;
+
+  createUser(user: InsertUser): Promise<User>;
+  getUserById(id: number): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  createPracticeRound(userId: number, round: InsertPracticeRound): Promise<PracticeRound>;
+  listPracticeRounds(userId: number): Promise<PracticeRound[]>;
+  getPracticeRound(userId: number, id: number): Promise<PracticeRound | undefined>;
+  deletePracticeRound(userId: number, id: number): Promise<boolean>;
 }
 
 function nextPeriodEnd(from: Date, interval: string): Date {
@@ -50,10 +65,7 @@ function nextPeriodEnd(from: Date, interval: string): Date {
 
 export class DatabaseStorage implements IStorage {
   async createInquiry(insertInquiry: InsertInquiry): Promise<Inquiry> {
-    const [inquiry] = await db
-      .insert(inquiries)
-      .values(insertInquiry)
-      .returning();
+    const [inquiry] = await db.insert(inquiries).values(insertInquiry).returning();
     return inquiry;
   }
 
@@ -202,6 +214,60 @@ export class DatabaseStorage implements IStorage {
 
   async deleteResearch(id: number): Promise<void> {
     await db.delete(researchBundles).where(eq(researchBundles.id, id));
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  async getUserById(id: number): Promise<User | undefined> {
+    const [u] = await db.select().from(users).where(eq(users.id, id));
+    return u;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [u] = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
+    return u;
+  }
+
+  async createPracticeRound(userId: number, round: InsertPracticeRound): Promise<PracticeRound> {
+    const [r] = await db
+      .insert(practiceRounds)
+      .values({
+        userId,
+        topic: round.topic,
+        side: round.side,
+        format: round.format,
+        transcript: round.transcript,
+        feedback: (round.feedback ?? null) as PracticeFeedback | null,
+      })
+      .returning();
+    return r;
+  }
+
+  async listPracticeRounds(userId: number): Promise<PracticeRound[]> {
+    return db
+      .select()
+      .from(practiceRounds)
+      .where(eq(practiceRounds.userId, userId))
+      .orderBy(desc(practiceRounds.createdAt));
+  }
+
+  async getPracticeRound(userId: number, id: number): Promise<PracticeRound | undefined> {
+    const [r] = await db
+      .select()
+      .from(practiceRounds)
+      .where(and(eq(practiceRounds.id, id), eq(practiceRounds.userId, userId)));
+    return r;
+  }
+
+  async deletePracticeRound(userId: number, id: number): Promise<boolean> {
+    const res = await db
+      .delete(practiceRounds)
+      .where(and(eq(practiceRounds.id, id), eq(practiceRounds.userId, userId)))
+      .returning({ id: practiceRounds.id });
+    return res.length > 0;
   }
 }
 

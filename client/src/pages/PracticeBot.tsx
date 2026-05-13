@@ -5,6 +5,9 @@ import { type DebateTopic, FORMAT_LABELS, TOPICS } from "@shared/topics";
 import { motion, AnimatePresence } from "framer-motion";
 import { Navigation } from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/use-auth";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { History as HistoryIcon, CheckCircle2, LogIn } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -198,6 +201,9 @@ function getQueryParams(): URLSearchParams {
 
 export default function PracticeBot() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const [savedRoundId, setSavedRoundId] = useState<number | null>(null);
+  const [savingRound, setSavingRound] = useState(false);
 
   const initialParams = useMemo(() => {
     const p = getQueryParams();
@@ -667,6 +673,7 @@ export default function PracticeBot() {
       }
       const data = (await res.json()) as Feedback;
       setFeedback(data);
+      void saveRound(data);
     } catch {
       const msg = "Network error while generating your report. Please try again.";
       setFeedbackError(msg);
@@ -764,12 +771,39 @@ export default function PracticeBot() {
     if (packetFileInputRef.current) packetFileInputRef.current.value = "";
   }
 
+  async function saveRound(fb: Feedback | null) {
+    if (!user || savedRoundId) return;
+    setSavingRound(true);
+    try {
+      const res = await apiRequest("POST", "/api/practice/rounds", {
+        topic: activeTopic,
+        side,
+        format,
+        transcript: history,
+        feedback: fb,
+      });
+      const saved = (await res.json()) as { id: number };
+      setSavedRoundId(saved.id);
+      queryClient.invalidateQueries({ queryKey: ["/api/practice/rounds"] });
+      toast({ title: "Round saved", description: "View it anytime in My History." });
+    } catch {
+      toast({
+        title: "Couldn't save round",
+        description: "We'll keep it on screen — try the feedback button again to retry saving.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingRound(false);
+    }
+  }
+
   function resetRound() {
     setHistory([]);
     setFeedback(null);
     setFeedbackError(null);
     setLiveTranscript("");
     speechFinalRef.current = "";
+    setSavedRoundId(null);
     if (videoUrl) { URL.revokeObjectURL(videoUrl); setVideoUrl(null); }
     setSavedBlob(null);
     setSavedMime("");
@@ -910,7 +944,37 @@ export default function PracticeBot() {
         </div>
       </section>
 
-      <section className="container mx-auto max-w-5xl px-4 py-10 grid lg:grid-cols-3 gap-6">
+      <section className="container mx-auto max-w-5xl px-4 pt-6">
+        {user ? (
+          <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-primary/5 border border-primary/15 text-sm" data-testid="banner-signed-in">
+            <span className="text-foreground/80">
+              Signed in as <span className="font-semibold text-primary">{user.name || user.email}</span>. Rounds save automatically when you get feedback.
+            </span>
+            <Link
+              href="/history"
+              className="inline-flex items-center gap-1.5 text-accent font-semibold hover:underline whitespace-nowrap"
+              data-testid="link-view-history"
+            >
+              <HistoryIcon className="w-3.5 h-3.5" /> View history
+            </Link>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-accent/5 border border-accent/20 text-sm" data-testid="banner-signin-cta">
+            <span className="text-foreground/80">
+              <span className="font-semibold text-foreground">Want to save your progress?</span> Sign in to keep transcripts, feedback scores, and replays after every round.
+            </span>
+            <Link
+              href="/signin"
+              className="inline-flex items-center gap-1.5 text-accent font-semibold hover:underline whitespace-nowrap"
+              data-testid="link-signin-cta"
+            >
+              <LogIn className="w-3.5 h-3.5" /> Sign in
+            </Link>
+          </div>
+        )}
+      </section>
+
+      <section className="container mx-auto max-w-5xl px-4 py-6 grid lg:grid-cols-3 gap-6">
         {/* LEFT: Setup + Recording */}
         <div className="lg:col-span-2 space-y-6">
           {/* Setup card */}
@@ -1849,9 +1913,28 @@ export default function PracticeBot() {
                         <span className="text-lg text-white/60 font-semibold">/100</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/20">
-                      <Volume2 className="w-4 h-4 text-accent" />
-                      <span className="text-xs font-semibold">Coach Report</span>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/20">
+                        <Volume2 className="w-4 h-4 text-accent" />
+                        <span className="text-xs font-semibold">Coach Report</span>
+                      </div>
+                      {user && savingRound && (
+                        <span
+                          className="inline-flex items-center gap-1 text-[11px] text-white/80"
+                          data-testid="text-saving"
+                        >
+                          <Loader2 className="w-3 h-3 animate-spin" /> Saving…
+                        </span>
+                      )}
+                      {user && savedRoundId && !savingRound && (
+                        <Link
+                          href="/history"
+                          className="inline-flex items-center gap-1 text-[11px] text-white font-semibold hover:underline"
+                          data-testid="text-saved"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Saved to history
+                        </Link>
+                      )}
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-2 mt-5 text-center">

@@ -792,7 +792,7 @@ export function registerPracticeRoutes(app: Express) {
     const id = makeSlug();
     // Signed-in users get clips that don't auto-expire; anonymous uploads
     // are kept for 30 days then cleaned up by the lazy sweep.
-    const isSignedIn = !!req.session?.userEmail;
+    const isSignedIn = !!req.session?.userId;
     const expiresAt = isSignedIn
       ? null
       : new Date(Date.now() + SHARE_TTL_DAYS * 24 * 60 * 60 * 1000);

@@ -1,12 +1,12 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import type { Server } from "http";
 import OpenAI from "openai";
 import { z } from "zod";
 import { storage } from "./storage";
-import { insertInquirySchema } from "@shared/schema";
+import { insertInquirySchema, savePracticeRoundSchema } from "@shared/schema";
 import { TOPICS, getTopicById } from "@shared/topics";
 import { registerPracticeRoutes } from "./practice";
-import { registerAuthRoutes } from "./auth";
+import { registerAuthRoutes, requireAuth, setupSession } from "./auth";
 import { registerBillingRoutes } from "./billing";
 import { registerResearchRoutes } from "./research";
 
@@ -86,6 +86,8 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express,
 ): Promise<Server> {
+  setupSession(app);
+
   app.post("/api/inquiries", async (req, res) => {
     try {
       const data = insertInquirySchema.parse(req.body);
@@ -171,6 +173,50 @@ export async function registerRoutes(
       res.write(`data: ${JSON.stringify({ error: "AI assistant failed" })}\n\n`);
       res.end();
     }
+  });
+
+  app.post("/api/practice/rounds", requireAuth, async (req: Request, res: Response) => {
+    const parsed = savePracticeRoundSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Invalid round data" });
+    try {
+      const round = await storage.createPracticeRound(req.session.userId!, {
+        topic: parsed.data.topic,
+        side: parsed.data.side,
+        format: parsed.data.format,
+        transcript: parsed.data.transcript,
+        feedback: parsed.data.feedback ?? null,
+      });
+      res.status(201).json(round);
+    } catch (err) {
+      console.error("save round error", err);
+      res.status(500).json({ error: "Failed to save round" });
+    }
+  });
+
+  app.get("/api/practice/rounds", requireAuth, async (req, res) => {
+    try {
+      const rounds = await storage.listPracticeRounds(req.session.userId!);
+      res.json(rounds);
+    } catch (err) {
+      console.error("list rounds error", err);
+      res.status(500).json({ error: "Failed to load rounds" });
+    }
+  });
+
+  app.get("/api/practice/rounds/:id", requireAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
+    const round = await storage.getPracticeRound(req.session.userId!, id);
+    if (!round) return res.status(404).json({ error: "Not found" });
+    res.json(round);
+  });
+
+  app.delete("/api/practice/rounds/:id", requireAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
+    const ok = await storage.deletePracticeRound(req.session.userId!, id);
+    if (!ok) return res.status(404).json({ error: "Not found" });
+    res.json({ ok: true });
   });
 
   return httpServer;
