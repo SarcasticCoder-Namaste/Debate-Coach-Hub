@@ -9,7 +9,7 @@ import {
   getSpeechOrder,
   type SpeechPhase,
 } from "@shared/schema";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion, useMotionValue, useSpring, useTransform, animate } from "framer-motion";
 import { Navigation } from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
@@ -210,11 +210,117 @@ function getQueryParams(): URLSearchParams {
   return new URLSearchParams(window.location.search);
 }
 
+function AnimatedNumber({ value, duration = 1.2 }: { value: number; duration?: number }) {
+  const [display, setDisplay] = useState(0);
+  const reduced = useReducedMotion();
+  useEffect(() => {
+    if (reduced) { setDisplay(value); return; }
+    const controls = animate(0, value, {
+      duration,
+      ease: [0.22, 1, 0.36, 1],
+      onUpdate: (v) => setDisplay(Math.round(v)),
+    });
+    return () => controls.stop();
+  }, [value, duration, reduced]);
+  return <>{display}</>;
+}
+
+function HeroTiltTile({
+  children,
+  reduced,
+  className,
+}: {
+  children: React.ReactNode;
+  reduced: boolean | null;
+  className?: string;
+}) {
+  const mx = useMotionValue(0);
+  const my = useMotionValue(0);
+  const rx = useSpring(useTransform(my, [-0.5, 0.5], [8, -8]), { stiffness: 180, damping: 18 });
+  const ry = useSpring(useTransform(mx, [-0.5, 0.5], [-10, 10]), { stiffness: 180, damping: 18 });
+  return (
+    <motion.div
+      onMouseMove={(e) => {
+        if (reduced) return;
+        const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        mx.set((e.clientX - r.left) / r.width - 0.5);
+        my.set((e.clientY - r.top) / r.height - 0.5);
+      }}
+      onMouseLeave={() => { mx.set(0); my.set(0); }}
+      style={reduced ? undefined : { rotateX: rx, rotateY: ry, transformStyle: "preserve-3d" }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
 export default function PracticeBot() {
   const { toast } = useToast();
   const { user } = useAuth();
   const prefersReducedMotion = useReducedMotion();
   const displayName = (user?.name?.trim() || user?.email?.split("@")[0] || "Debater").split(/\s+/)[0];
+
+  // ===== Dynamic hero state (signed-in personalization) =====
+  const { data: heroRounds = [] } = useQuery<Array<{ id: number; createdAt: string; format: string; side: string; topic: string; feedback: FeedbackReport | null }>>({
+    queryKey: ["/api/practice/rounds"],
+    enabled: !!user,
+  });
+  const heroStats = useMemo(() => {
+    const total = heroRounds.length;
+    const scored = heroRounds.filter((r) => r.feedback?.overallScore != null);
+    const best = scored.length ? Math.max(...scored.map((r) => r.feedback!.overallScore)) : 0;
+    const avg = scored.length ? Math.round(scored.reduce((a, r) => a + r.feedback!.overallScore, 0) / scored.length) : 0;
+    // streak = distinct days with rounds, counted backwards from today
+    const dayKeys = new Set(heroRounds.map((r) => new Date(r.createdAt).toISOString().slice(0, 10)));
+    let streak = 0;
+    const d = new Date();
+    while (true) {
+      const k = d.toISOString().slice(0, 10);
+      if (dayKeys.has(k)) { streak++; d.setDate(d.getDate() - 1); }
+      else break;
+    }
+    const last = heroRounds[0] ?? null;
+    return { total, best, avg, streak, last };
+  }, [heroRounds]);
+
+  // Rotating taglines under the headline
+  const taglines = useMemo<string[]>(() => {
+    if (!user) return [];
+    const base: string[] = [];
+    if (heroStats.streak >= 2) base.push(`You're on a ${heroStats.streak}-day streak. Keep the fire going.`);
+    if (heroStats.best >= 80) base.push(`Your personal best is ${heroStats.best}. Beat it today.`);
+    if (heroStats.last) base.push(`Last round: ${heroStats.last.format} · ${heroStats.last.side}. Run it back?`);
+    if (heroStats.total === 0) base.push("Your first round is one click away. Pick a side and spar.");
+    base.push("Tournament prep, tonight.");
+    base.push("Drill the cross-x. Sharpen the rebuttal.");
+    base.push("Speak. Get judged. Get better.");
+    return base;
+  }, [user, heroStats]);
+  const [taglineIdx, setTaglineIdx] = useState(0);
+  useEffect(() => {
+    if (!taglines.length || prefersReducedMotion) return;
+    const t = setInterval(() => setTaglineIdx((i) => (i + 1) % taglines.length), 3800);
+    return () => clearInterval(t);
+  }, [taglines.length, prefersReducedMotion]);
+
+  // Mouse-following spotlight inside hero
+  const heroRef = useRef<HTMLElement | null>(null);
+  const spotX = useMotionValue(50);
+  const spotY = useMotionValue(50);
+  const spotXSm = useSpring(spotX, { stiffness: 80, damping: 20 });
+  const spotYSm = useSpring(spotY, { stiffness: 80, damping: 20 });
+  const spotlightBg = useTransform(
+    [spotXSm, spotYSm] as any,
+    ([x, y]: number[]) =>
+      `radial-gradient(420px circle at ${x}% ${y}%, hsl(var(--accent) / 0.18), transparent 65%)`,
+  );
+
+  // Marquee topics — random sample from the library
+  const marqueeTopics = useMemo(() => {
+    const shuffled = [...TOPICS].sort(() => 0.5 - Math.random()).slice(0, 14);
+    return shuffled;
+  }, []);
   const [savedRoundId, setSavedRoundId] = useState<number | null>(null);
   const [savingRound, setSavingRound] = useState(false);
 
@@ -1317,159 +1423,343 @@ export default function PracticeBot() {
       <Navigation />
       <audio ref={audioRef} hidden />
 
-      {/* ===== Animated post-login hero ===== */}
-      <section className="relative pt-28 pb-12 px-4 overflow-hidden bg-gradient-to-br from-primary via-primary to-[hsl(var(--primary)/0.85)]">
-        {/* Animated gradient orbs */}
-        <div className="absolute inset-0 pointer-events-none">
-          <motion.div
-            className="absolute -top-32 -right-32 w-[600px] h-[600px] bg-accent/25 rounded-full blur-[110px]"
-            animate={prefersReducedMotion ? { opacity: 0.6 } : { scale: [1, 1.15, 1], opacity: [0.5, 0.75, 0.5] }}
-            transition={prefersReducedMotion ? { duration: 0 } : { duration: 8, repeat: Infinity, ease: "easeInOut" }}
-          />
-          <motion.div
-            className="absolute -bottom-24 left-1/4 w-[450px] h-[450px] bg-white/[0.06] rounded-full blur-[100px]"
-            animate={prefersReducedMotion ? { opacity: 0.5 } : { scale: [1, 1.1, 1], opacity: [0.4, 0.7, 0.4] }}
-            transition={prefersReducedMotion ? { duration: 0 } : { duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1.5 }}
-          />
-          <motion.div
-            className="absolute top-1/3 right-1/3 w-[300px] h-[300px] bg-accent/15 rounded-full blur-[90px]"
-            animate={prefersReducedMotion ? { opacity: 0.4 } : { scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
-            transition={prefersReducedMotion ? { duration: 0 } : { duration: 7, repeat: Infinity, ease: "easeInOut", delay: 0.8 }}
-          />
-        </div>
+      {/* ===== Cinematic post-login hero ===== */}
+      <section
+        ref={heroRef}
+        onMouseMove={(e) => {
+          if (prefersReducedMotion) return;
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          spotX.set(((e.clientX - r.left) / r.width) * 100);
+          spotY.set(((e.clientY - r.top) / r.height) * 100);
+        }}
+        className="relative pt-28 pb-0 px-4 overflow-hidden bg-[#0b1530]"
+      >
+        {/* Aurora mesh */}
+        <div className="absolute inset-0 pointer-events-none aurora opacity-70" />
+        {/* Noise/grain layer */}
+        <div className="absolute inset-0 pointer-events-none opacity-[0.06] mix-blend-overlay" style={{
+          backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
+        }} />
+        {/* Mouse spotlight */}
+        <motion.div className="absolute inset-0 pointer-events-none" style={prefersReducedMotion ? undefined : { background: spotlightBg }} />
+        {/* Drifting grid overlay */}
+        <div
+          className={`absolute inset-0 pointer-events-none opacity-[0.07] ${prefersReducedMotion ? "" : "grid-drift"}`}
+          style={{
+            backgroundImage:
+              "linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px)",
+            backgroundSize: "56px 56px, 56px 56px",
+            maskImage: "radial-gradient(ellipse at 50% 30%, black 30%, transparent 75%)",
+            WebkitMaskImage: "radial-gradient(ellipse at 50% 30%, black 30%, transparent 75%)",
+          }}
+        />
 
-        <div className="container relative z-10 mx-auto max-w-5xl">
+        <div className="container relative z-10 mx-auto max-w-6xl pb-12">
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
+            className="flex items-center justify-between gap-3 mb-8"
           >
             <Link
               href="/"
-              className="inline-flex items-center gap-2 text-white/70 hover:text-white text-sm mb-5 transition-colors"
+              className="inline-flex items-center gap-2 text-white/70 hover:text-white text-sm transition-colors"
               data-testid="link-back-home"
             >
               <ArrowLeft className="w-4 h-4" /> Home
             </Link>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, scale: 0.92 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/20 text-white/90 text-xs font-medium mb-4 backdrop-blur-sm"
-          >
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-accent" />
-            </span>
-            <Sparkles className="w-3.5 h-3.5 text-accent" />
-            {user ? "Live AI Practice · Personalized for you" : "Live AI Practice Round"}
-          </motion.div>
-
-          <motion.h1
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.65, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
-            className="text-3xl md:text-5xl lg:text-6xl font-display font-bold text-white leading-[1.05] tracking-tight"
-          >
-            {user ? (
-              <>
-                Welcome back,{" "}
-                <span className="gradient-text" data-testid="text-greeting-name">
-                  {displayName}.
-                </span>
-              </>
-            ) : (
-              <>Spar With An <span className="gradient-text">AI Opponent.</span></>
+            {user && heroStats.last && (
+              <Link
+                href="/history"
+                data-testid="link-resume-last"
+                className="hidden sm:inline-flex items-center gap-2 text-xs text-white/70 hover:text-white px-3 py-1.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-sm transition-colors"
+              >
+                <Clock className="w-3.5 h-3.5" />
+                Last round · {heroStats.last.format} {heroStats.last.side}
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
             )}
-          </motion.h1>
+          </motion.div>
 
-          <motion.p
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.55, delay: 0.2 }}
-            className="text-white/75 mt-4 max-w-2xl text-base md:text-lg leading-relaxed"
-          >
-            {user
-              ? "Pick up a resolution, jump into a live round, or sharpen a single skill in 60 seconds. Everything saves automatically."
-              : "Pick a resolution, choose your side, and run a live round. Get spoken counter-arguments and a structured feedback card after every speech."}
-          </motion.p>
+          <div className="grid lg:grid-cols-12 gap-8 items-center">
+            {/* LEFT: Headline column */}
+            <div className="lg:col-span-7">
+              {/* Live status pill with animated waveform */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.92 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-white/10 border border-white/20 text-white/90 text-xs font-semibold mb-5 backdrop-blur-sm"
+              >
+                <span className="relative flex h-2 w-2">
+                  {!prefersReducedMotion && (
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75" />
+                  )}
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-accent" />
+                </span>
+                <span className="inline-flex items-end gap-[2px] h-3" aria-hidden>
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <span
+                      key={i}
+                      className="wave-bar inline-block w-[2px] bg-accent rounded-full"
+                      style={{ height: "100%", animationDelay: `${i * 0.12}s` }}
+                    />
+                  ))}
+                </span>
+                {user ? "Live AI Practice · Tuned to you" : "Live AI Practice Round"}
+              </motion.div>
 
-          {/* Quick-action tiles (signed-in only) */}
-          {user && (
-            <motion.div
-              initial="hidden"
-              animate="visible"
-              variants={{
-                hidden: {},
-                visible: { transition: { staggerChildren: 0.07, delayChildren: 0.35 } },
-              }}
-              className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-3"
-            >
-              {[
-                { href: "#round-setup", label: "Start a round", desc: "Pick a topic & spar", icon: Mic, accent: true, scroll: true },
-                { href: "/drills", label: "Quick drill", desc: "60-second skill rep", icon: Zap },
-                { href: "/topics", label: "Browse topics", desc: "Library of resolutions", icon: Library },
-                { href: "/history", label: "My practice", desc: "Recent rounds & scores", icon: Trophy },
-              ].map((t) => {
-                const Icon = t.icon;
-                const inner = (
-                  <motion.div
-                    variants={{
-                      hidden: { opacity: 0, y: 16 },
-                      visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } },
-                    }}
-                    whileHover={prefersReducedMotion ? undefined : { y: -4, transition: { duration: 0.2 } }}
-                    className={`group relative h-full p-4 rounded-xl border backdrop-blur-sm transition-colors cursor-pointer ${
-                      t.accent
-                        ? "bg-accent/15 border-accent/40 hover:bg-accent/25 hover:border-accent/60"
-                        : "bg-white/5 border-white/15 hover:bg-white/10 hover:border-white/30"
-                    }`}
+              <motion.h1
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.65, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+                className="font-display font-bold text-white leading-[0.98] tracking-tight text-[2.6rem] md:text-6xl lg:text-7xl"
+              >
+                {user ? (
+                  <>
+                    <span className="block text-white/90">Welcome back,</span>
+                    <span className="block gradient-text" data-testid="text-greeting-name">
+                      {displayName}.
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="block">Spar With An</span>
+                    <span className="block gradient-text">AI Opponent.</span>
+                  </>
+                )}
+              </motion.h1>
+
+              {/* Rotating tagline */}
+              <div className="mt-5 h-7 md:h-8 relative" data-testid="hero-tagline">
+                <AnimatePresence mode="wait">
+                  <motion.p
+                    key={user ? `t-${taglineIdx}` : "out"}
+                    initial={{ opacity: 0, y: 8, filter: "blur(6px)" }}
+                    animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                    exit={{ opacity: 0, y: -8, filter: "blur(6px)" }}
+                    transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                    className="absolute inset-0 text-white/80 text-base md:text-lg font-medium"
                   >
-                    <div className={`inline-flex items-center justify-center w-9 h-9 rounded-lg mb-3 ${
-                      t.accent ? "bg-accent text-white" : "bg-white/10 text-white"
-                    }`}>
-                      <Icon className="w-4 h-4" />
+                    {user
+                      ? taglines[taglineIdx]
+                      : "Pick a resolution, choose your side, and run a live round."}
+                  </motion.p>
+                </AnimatePresence>
+              </div>
+
+              {/* Primary actions */}
+              <motion.div
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.3 }}
+                className="mt-8 flex flex-wrap items-center gap-3"
+              >
+                <button
+                  type="button"
+                  data-testid="button-hero-start-round"
+                  onClick={() =>
+                    document.getElementById("round-setup")?.scrollIntoView({
+                      behavior: prefersReducedMotion ? "auto" : "smooth",
+                      block: "start",
+                    })
+                  }
+                  className={`group relative inline-flex items-center gap-2.5 px-6 py-3.5 rounded-full bg-accent text-white text-base font-bold shadow-xl shadow-accent/30 hover:scale-[1.03] active:scale-[0.99] transition-transform overflow-hidden ${prefersReducedMotion ? "" : "pulse-glow"}`}
+                >
+                  {!prefersReducedMotion && (
+                    <span className="absolute inset-0 shimmer pointer-events-none rounded-full" aria-hidden />
+                  )}
+                  <Mic className="w-5 h-5 relative z-10" />
+                  <span className="relative z-10">{user && heroStats.total > 0 ? "Start a new round" : "Start your first round"}</span>
+                  <ChevronRight className="w-4 h-4 relative z-10 group-hover:translate-x-1 transition-transform" />
+                </button>
+                <Link
+                  href="/drills"
+                  data-testid="button-hero-quick-drill"
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-white/10 hover:bg-white/15 border border-white/20 text-white text-sm font-semibold backdrop-blur-sm transition-colors"
+                >
+                  <Zap className="w-4 h-4 text-accent" /> 60-second drill
+                </Link>
+              </motion.div>
+
+              {/* Animated stat strip (signed-in only) */}
+              {user && (
+                <motion.div
+                  initial={{ opacity: 0, y: 18 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.55, delay: 0.45 }}
+                  className="mt-9 grid grid-cols-3 max-w-md divide-x divide-white/10 rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-md overflow-hidden"
+                  data-testid="hero-stats"
+                >
+                  {[
+                    { label: "Rounds", value: heroStats.total, icon: Mic },
+                    { label: "Best score", value: heroStats.best, icon: Trophy, suffix: heroStats.best ? "" : "" },
+                    { label: "Day streak", value: heroStats.streak, icon: Zap },
+                  ].map((s) => {
+                    const Icon = s.icon;
+                    return (
+                      <div key={s.label} className="px-4 py-3.5">
+                        <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-white/55 font-bold">
+                          <Icon className="w-3 h-3 text-accent" /> {s.label}
+                        </div>
+                        <div className="mt-1 text-2xl md:text-3xl font-display font-bold text-white tabular-nums">
+                          <AnimatedNumber value={s.value} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </motion.div>
+              )}
+            </div>
+
+            {/* RIGHT: Live preview / quick-action stack */}
+            {user && (
+              <motion.div
+                initial={{ opacity: 0, x: 30, scale: 0.96 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                transition={{ duration: 0.7, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                className="lg:col-span-5"
+                style={{ perspective: "1200px" }}
+              >
+                <HeroTiltTile
+                  reduced={prefersReducedMotion}
+                  className="relative rounded-2xl border border-white/15 bg-gradient-to-br from-white/[0.07] to-white/[0.02] backdrop-blur-xl p-5 shadow-2xl shadow-black/30"
+                >
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="flex gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-yellow-400/80" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
                     </div>
-                    <div className="text-sm font-bold text-white">{t.label}</div>
-                    <div className="text-xs text-white/65 mt-0.5">{t.desc}</div>
-                    <ChevronRight className={`absolute top-4 right-4 w-4 h-4 transition-transform group-hover:translate-x-0.5 ${
-                      t.accent ? "text-accent" : "text-white/50"
-                    }`} />
-                  </motion.div>
-                );
-                if (t.scroll) {
+                    <div className="ml-2 text-[11px] uppercase tracking-wider text-white/55 font-bold">
+                      DebateMastery · Live
+                    </div>
+                  </div>
+
+                  {/* Quick-action grid inside the panel */}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {[
+                      { href: "#round-setup", label: "Start a round", desc: "Pick a topic & spar", icon: Mic, accent: true, scroll: true },
+                      { href: "/drills", label: "Quick drill", desc: "60-second rep", icon: Zap },
+                      { href: "/topics", label: "Browse topics", desc: "Resolution library", icon: Library },
+                      { href: "/history", label: "My practice", desc: "Rounds & scores", icon: Trophy },
+                    ].map((t) => {
+                      const Icon = t.icon;
+                      const inner = (
+                        <motion.div
+                          whileHover={prefersReducedMotion ? undefined : { y: -3 }}
+                          transition={{ duration: 0.2 }}
+                          className={`group relative h-full p-3.5 rounded-xl border transition-colors cursor-pointer ${
+                            t.accent
+                              ? "bg-accent/20 border-accent/50 hover:bg-accent/30"
+                              : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/25"
+                          }`}
+                        >
+                          <div className={`inline-flex items-center justify-center w-8 h-8 rounded-lg mb-2 ${
+                            t.accent ? "bg-accent text-white" : "bg-white/10 text-white"
+                          }`}>
+                            <Icon className="w-4 h-4" />
+                          </div>
+                          <div className="text-[13px] font-bold text-white leading-tight">{t.label}</div>
+                          <div className="text-[11px] text-white/60 mt-0.5">{t.desc}</div>
+                        </motion.div>
+                      );
+                      const cls = "rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b1530] block";
+                      if (t.scroll) {
+                        return (
+                          <button
+                            key={t.label}
+                            type="button"
+                            data-testid={`tile-${t.label.toLowerCase().replace(/\s+/g, "-")}`}
+                            onClick={() =>
+                              document.getElementById("round-setup")?.scrollIntoView({
+                                behavior: prefersReducedMotion ? "auto" : "smooth",
+                                block: "start",
+                              })
+                            }
+                            className={`${cls} text-left`}
+                          >
+                            {inner}
+                          </button>
+                        );
+                      }
+                      return (
+                        <Link
+                          key={t.label}
+                          href={t.href}
+                          data-testid={`tile-${t.label.toLowerCase().replace(/\s+/g, "-")}`}
+                          className={cls}
+                        >
+                          {inner}
+                        </Link>
+                      );
+                    })}
+                  </div>
+
+                  {/* Avg score sparkline-ish bar */}
+                  {heroStats.total > 0 && (
+                    <div className="mt-4 p-3 rounded-xl bg-black/20 border border-white/10">
+                      <div className="flex items-center justify-between text-[11px] text-white/60 mb-1.5">
+                        <span className="uppercase tracking-wider font-bold">Avg score</span>
+                        <span className="text-white font-bold tabular-nums">
+                          <AnimatedNumber value={heroStats.avg} /> / 100
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${heroStats.avg}%` }}
+                          transition={{ duration: 1.2, delay: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                          className="h-full bg-gradient-to-r from-accent via-accent to-orange-400 rounded-full"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </HeroTiltTile>
+              </motion.div>
+            )}
+          </div>
+        </div>
+
+        {/* Marquee topic ticker */}
+        <div className="relative z-10 border-t border-white/10 bg-black/20 backdrop-blur-sm py-3 overflow-hidden">
+          <div className="flex items-center gap-3 px-4 max-w-6xl mx-auto">
+            <span className="flex-shrink-0 inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-accent font-bold">
+              <Sparkles className="w-3 h-3" /> Trending
+            </span>
+            <div className="relative flex-1 overflow-hidden mask-fade-x">
+              <ul
+                className={`flex gap-2 whitespace-nowrap w-max ${prefersReducedMotion ? "" : "marquee-track"}`}
+                aria-label="Trending debate topics"
+              >
+                {[...marqueeTopics, ...marqueeTopics].map((t, i) => {
+                  const isDuplicate = i >= marqueeTopics.length;
                   return (
-                    <button
-                      key={t.label}
-                      type="button"
-                      data-testid={`tile-${t.label.toLowerCase().replace(/\s+/g, "-")}`}
-                      onClick={() => {
-                        document.getElementById("round-setup")?.scrollIntoView({
-                          behavior: prefersReducedMotion ? "auto" : "smooth",
-                          block: "start",
-                        });
-                      }}
-                      className="text-left rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-primary"
-                    >
-                      {inner}
-                    </button>
+                    <li key={`${t.id}-${i}`} aria-hidden={isDuplicate || undefined}>
+                      <button
+                        type="button"
+                        tabIndex={isDuplicate ? -1 : 0}
+                        data-testid={isDuplicate ? undefined : `marquee-topic-${t.id}`}
+                        onClick={() => {
+                          setTopic(t.resolution);
+                          setActiveTopicId(t.id);
+                          setFormat(t.format as FormatKey);
+                          document.getElementById("round-setup")?.scrollIntoView({
+                            behavior: prefersReducedMotion ? "auto" : "smooth",
+                            block: "start",
+                          });
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs text-white/85 bg-white/5 border border-white/10 hover:bg-accent/20 hover:border-accent/40 hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                      >
+                        <span className="text-[10px] uppercase tracking-wider text-accent/90 font-bold">{t.format}</span>
+                        <span className="truncate max-w-[280px]">{t.resolution}</span>
+                      </button>
+                    </li>
                   );
-                }
-                return (
-                  <Link
-                    key={t.label}
-                    href={t.href}
-                    data-testid={`tile-${t.label.toLowerCase().replace(/\s+/g, "-")}`}
-                    className="rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-primary"
-                  >
-                    {inner}
-                  </Link>
-                );
-              })}
-            </motion.div>
-          )}
+                })}
+              </ul>
+            </div>
+          </div>
         </div>
       </section>
 
