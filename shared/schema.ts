@@ -252,6 +252,8 @@ export const practiceShares = pgTable("practice_shares", {
   format: text("format").notNull(),
   transcript: jsonb("transcript").$type<PracticeTurn[]>().notNull(),
   feedback: jsonb("feedback").$type<FeedbackReport | null>(),
+  ownerUserId: integer("owner_user_id"),
+  ownerSessionId: text("owner_session_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   expiresAt: timestamp("expires_at"),
   lastCommentNotifiedAt: timestamp("last_comment_notified_at"),

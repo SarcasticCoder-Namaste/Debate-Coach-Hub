@@ -102,6 +102,7 @@ export interface IStorage {
   listPracticeShareCommentsSince(shareId: string, since: Date | null): Promise<PracticeShareComment[]>;
   setPracticeShareNotifiedAt(shareId: string, when: Date): Promise<void>;
   updateUserPreferences(userId: number, prefs: { emailCommentNotifications?: boolean }): Promise<User | undefined>;
+  deletePracticeShareComment(shareId: string, commentId: number): Promise<boolean>;
 
   listSavedTopics(userId: string): Promise<SavedTopic[]>;
   addSavedTopic(input: InsertSavedTopic): Promise<SavedTopic>;
@@ -480,6 +481,19 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId))
       .returning();
     return row;
+  }
+
+  async deletePracticeShareComment(shareId: string, commentId: number): Promise<boolean> {
+    const result = await db
+      .delete(practiceShareComments)
+      .where(
+        and(
+          eq(practiceShareComments.id, commentId),
+          eq(practiceShareComments.shareId, shareId),
+        ),
+      )
+      .returning({ id: practiceShareComments.id });
+    return result.length > 0;
   }
 
   async listSavedTopics(userId: string): Promise<SavedTopic[]> {

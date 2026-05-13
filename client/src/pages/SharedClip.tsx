@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Navigation } from "@/components/Navigation";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Clock, Loader2, MessageSquare, Star, Volume2, AlertTriangle, Send, Sparkles } from "lucide-react";
+import { ArrowLeft, Clock, Loader2, MessageSquare, Star, Volume2, AlertTriangle, Send, Sparkles, Trash2, Flag } from "lucide-react";
 
 type Turn = { role: "user" | "assistant"; content: string };
 type Feedback = {
@@ -37,6 +37,7 @@ interface ShareData {
   createdAt: string;
   expiresAt: string | null;
   videoUrl: string;
+  isOwner: boolean;
   comments: ShareComment[];
 }
 
@@ -88,6 +89,8 @@ export default function SharedClip() {
   const [submitting, setSubmitting] = useState(false);
 
   const [seenIds, setSeenIds] = useState<Set<number>>(new Set());
+  const [reportedIds, setReportedIds] = useState<Set<number>>(new Set());
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -136,6 +139,48 @@ export default function SharedClip() {
     try {
       localStorage.setItem(SEEN_KEY(id), JSON.stringify(Array.from(all)));
     } catch { /* ignore */ }
+  }
+
+  async function deleteComment(commentId: number) {
+    if (!id || !data) return;
+    if (!window.confirm("Delete this comment? This can't be undone.")) return;
+    setDeletingId(commentId);
+    try {
+      const res = await fetch(`/api/practice/shares/${id}/comments/${commentId}`, {
+        method: "DELETE",
+      });
+      if (res.status === 403) throw new Error("Only the clip owner can delete comments.");
+      if (!res.ok && res.status !== 204) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error ?? "Could not delete comment");
+      }
+      setData((prev) => prev ? { ...prev, comments: prev.comments.filter((c) => c.id !== commentId) } : prev);
+      toast({ title: "Comment removed", description: "It's gone from the public viewer." });
+    } catch (err) {
+      toast({ title: "Couldn't delete", description: err instanceof Error ? err.message : "Try again.", variant: "destructive" });
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  async function reportComment(commentId: number) {
+    if (!id) return;
+    if (reportedIds.has(commentId)) return;
+    setReportedIds((prev) => {
+      const next = new Set(prev);
+      next.add(commentId);
+      return next;
+    });
+    try {
+      await fetch(`/api/practice/shares/${id}/comments/${commentId}/report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "" }),
+      });
+      toast({ title: "Reported", description: "Thanks — we've flagged this comment for review." });
+    } catch {
+      toast({ title: "Couldn't report", description: "Please try again later.", variant: "destructive" });
+    }
   }
 
   function seekTo(sec: number) {
@@ -351,6 +396,34 @@ export default function SharedClip() {
                             <p className="text-sm text-foreground whitespace-pre-wrap break-words" data-testid={`text-comment-body-${c.id}`}>
                               {c.comment}
                             </p>
+                            <div className="flex items-center gap-3 mt-2">
+                              {data.isOwner ? (
+                                <button
+                                  type="button"
+                                  onClick={() => deleteComment(c.id)}
+                                  disabled={deletingId === c.id}
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-destructive hover:underline disabled:opacity-50"
+                                  data-testid={`button-delete-comment-${c.id}`}
+                                >
+                                  {deletingId === c.id ? (
+                                    <><Loader2 className="w-3 h-3 animate-spin" /> Deleting…</>
+                                  ) : (
+                                    <><Trash2 className="w-3 h-3" /> Delete</>
+                                  )}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => reportComment(c.id)}
+                                  disabled={reportedIds.has(c.id)}
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:underline disabled:opacity-50"
+                                  data-testid={`button-report-comment-${c.id}`}
+                                >
+                                  <Flag className="w-3 h-3" />
+                                  {reportedIds.has(c.id) ? "Reported" : "Report"}
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </li>

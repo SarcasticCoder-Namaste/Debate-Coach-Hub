@@ -483,6 +483,23 @@ const limitInit = makeRateLimiter(20, 60 * 60 * 1000);     // 20 init / hr / IP
 const limitFinalize = makeRateLimiter(10, 60 * 60 * 1000); // 10 saves / hr / IP
 const limitComment = makeRateLimiter(15, 10 * 60 * 1000);  // 15 comments / 10 min / IP
 const limitReferral = makeRateLimiter(8, 60 * 60 * 1000);  // 8 coach emails / hr / IP
+const limitReport = makeRateLimiter(20, 60 * 60 * 1000);   // 20 reports / hour / IP
+
+function isShareOwner(
+  req: Request,
+  share: { ownerUserId: number | null; ownerSessionId: string | null },
+): boolean {
+  const userId = req.session?.userId;
+  if (userId && share.ownerUserId && share.ownerUserId === userId) return true;
+  if (
+    share.ownerSessionId &&
+    req.sessionID &&
+    share.ownerSessionId === req.sessionID
+  ) {
+    return true;
+  }
+  return false;
+}
 
 function clientIp(req: Request): string {
   const fwd = req.headers["x-forwarded-for"];
@@ -1195,6 +1212,11 @@ export function registerPracticeRoutes(app: Express) {
     const expiresAt = isSignedIn
       ? null
       : new Date(Date.now() + SHARE_TTL_DAYS * 24 * 60 * 60 * 1000);
+    // Touch the session so anonymous uploaders get a stable session id we
+    // can use to scope ownership of the clip (and its comments) later.
+    if (!isSignedIn) {
+      (req.session as any).anonOwner = true;
+    }
     try {
       const row = await storage.createPracticeShare({
         id,
@@ -1207,6 +1229,8 @@ export function registerPracticeRoutes(app: Express) {
         format,
         transcript,
         feedback: feedback ?? null,
+        ownerUserId: req.session?.userId ?? null,
+        ownerSessionId: req.sessionID ?? null,
         expiresAt,
       });
       res.status(201).json({
@@ -1235,6 +1259,7 @@ export function registerPracticeRoutes(app: Express) {
       return res.status(410).json({ error: "This share has expired" });
     }
     const comments = await storage.listPracticeShareComments(row.id);
+    const isOwner = isShareOwner(req, row);
     res.json({
       id: row.id,
       mimeType: row.mimeType,
@@ -1247,6 +1272,7 @@ export function registerPracticeRoutes(app: Express) {
       createdAt: row.createdAt,
       expiresAt: row.expiresAt,
       videoUrl: `/api/practice/shares/${row.id}/video`,
+      isOwner,
       comments,
     });
   });
@@ -1375,6 +1401,52 @@ export function registerPracticeRoutes(app: Express) {
           ? "Email sent to your coach."
           : "Saved — the team will deliver this to your coach shortly.",
     });
+  });
+
+  // Owner-only: delete a coach comment from a share they uploaded.
+  app.delete("/api/practice/shares/:id/comments/:commentId", async (req: Request, res: Response) => {
+    const id = String(req.params.id ?? "");
+    const commentId = Number(req.params.commentId);
+    if (!/^[A-Za-z0-9_-]{6,16}$/.test(id)) {
+      return res.status(400).json({ error: "Invalid id" });
+    }
+    if (!Number.isInteger(commentId) || commentId <= 0) {
+      return res.status(400).json({ error: "Invalid comment id" });
+    }
+    const row = await storage.getPracticeShare(id);
+    if (!row) return res.status(404).json({ error: "Not found" });
+    if (!isShareOwner(req, row)) {
+      return res.status(403).json({ error: "Only the clip owner can delete comments." });
+    }
+    try {
+      const deleted = await storage.deletePracticeShareComment(id, commentId);
+      if (!deleted) return res.status(404).json({ error: "Comment not found" });
+      res.status(204).end();
+    } catch (err) {
+      console.error("share comment delete error", err);
+      res.status(500).json({ error: "Could not delete comment" });
+    }
+  });
+
+  // Anonymous viewers can flag a comment as abusive. We log it so the owner
+  // (or a future moderation pass) can act on it; we don't auto-hide.
+  app.post("/api/practice/shares/:id/comments/:commentId/report", async (req: Request, res: Response) => {
+    if (!limitReport(clientIp(req))) {
+      return res.status(429).json({ error: "Too many reports — please slow down." });
+    }
+    const id = String(req.params.id ?? "");
+    const commentId = Number(req.params.commentId);
+    if (!/^[A-Za-z0-9_-]{6,16}$/.test(id)) {
+      return res.status(400).json({ error: "Invalid id" });
+    }
+    if (!Number.isInteger(commentId) || commentId <= 0) {
+      return res.status(400).json({ error: "Invalid comment id" });
+    }
+    const reason = String(req.body?.reason ?? "").slice(0, 200);
+    console.warn(
+      `[share-report] share=${id} comment=${commentId} ip=${clientIp(req)} reason=${reason || "(none)"}`,
+    );
+    res.status(202).json({ ok: true });
   });
 
   // Stream the recorded video/audio for a share. Supports HTTP Range so
