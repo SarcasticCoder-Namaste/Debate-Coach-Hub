@@ -10,6 +10,9 @@ const FORMAT_GUIDES: Record<string, string> = {
   LD: "Lincoln-Douglas (1-on-1, value debate, framework + contentions, ~6 min constructive).",
   PF: "Public Forum (2-on-2, accessible argumentation, evidence-driven, 4-min cases).",
   Policy: "Policy Debate (CX, plan-focused, evidence comparison, fast delivery acceptable but clarity required).",
+  Parli: "Parliamentary (limited prep, 7-8 min speeches, logic and rhetoric over evidence; PMC/LOC/MGC/MOC/LOR/PMR structure).",
+  Congress: "Congressional Debate (3-min legislative speeches on bills/resolutions, parliamentary procedure, persuasive chamber-style).",
+  Worlds: "World Schools (3-on-3, 8-min substantives + 4-min reply, principle-driven, balanced rhetoric and analysis).",
 };
 
 const VOICES = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"] as const;

@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { type DebateTopic, FORMAT_LABELS } from "@shared/topics";
 import { motion, AnimatePresence } from "framer-motion";
 import { Navigation } from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
@@ -19,7 +21,7 @@ import {
 } from "lucide-react";
 
 type Side = "Aff" | "Neg";
-type FormatKey = "LD" | "PF" | "Policy";
+type FormatKey = "LD" | "PF" | "Policy" | "Parli" | "Congress" | "Worlds";
 type Turn = { role: "user" | "assistant"; content: string };
 
 interface SpeechRecognitionAlternativeLike {
@@ -73,13 +75,18 @@ type Feedback = {
   tip?: string;
 };
 
-const TOPICS = [
+const FALLBACK_TOPICS = [
   "Resolved: The United States ought to provide a universal basic income.",
   "Resolved: Public colleges and universities ought not consider standardized tests in admissions.",
   "Resolved: The development of artificial general intelligence is, on balance, beneficial.",
   "Resolved: In the United States, the right to be forgotten outweighs the freedom of the press.",
   "Resolved: Just governments ought to ensure food security for their citizens.",
 ];
+
+function getQueryParam(name: string): string | null {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get(name);
+}
 
 function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -153,11 +160,38 @@ export default function PracticeBot() {
   const { toast } = useToast();
 
   // setup
-  const [topic, setTopic] = useState(TOPICS[0]);
+  const initialTopicId = getQueryParam("topicId");
+  const initialSide = (getQueryParam("side") as Side | null) ?? "Aff";
+  const initialFormat = (getQueryParam("format") as FormatKey | null) ?? "LD";
+  const [topic, setTopic] = useState(FALLBACK_TOPICS[0]);
   const [customTopic, setCustomTopic] = useState("");
-  const [side, setSide] = useState<Side>("Aff");
-  const [format, setFormat] = useState<FormatKey>("LD");
+  const [side, setSide] = useState<Side>(initialSide);
+  const [format, setFormat] = useState<FormatKey>(initialFormat);
   const [cameraEnabled, setCameraEnabled] = useState(false);
+  const [activeTopicId, setActiveTopicId] = useState<string | null>(
+    initialTopicId,
+  );
+
+  const { data: libraryTopics = [] } = useQuery<DebateTopic[]>({
+    queryKey: ["/api/topics"],
+  });
+
+  const libraryById = useMemo(() => {
+    const map = new Map<string, DebateTopic>();
+    libraryTopics.forEach((t) => map.set(t.id, t));
+    return map;
+  }, [libraryTopics]);
+
+  // When a topicId is supplied via URL (or selected from the picker),
+  // pre-load its resolution and format.
+  useEffect(() => {
+    if (!activeTopicId) return;
+    const t = libraryById.get(activeTopicId);
+    if (!t) return;
+    setTopic(t.resolution);
+    setCustomTopic("");
+    setFormat(t.format as FormatKey);
+  }, [activeTopicId, libraryById]);
 
   // round state
   const [history, setHistory] = useState<Turn[]>([]);
@@ -583,21 +617,59 @@ export default function PracticeBot() {
                 <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 block">
                   Resolution / Topic
                 </label>
-                <Select value={topic} onValueChange={setTopic}>
+                <Select
+                  value={activeTopicId ?? `__fallback__${topic}`}
+                  onValueChange={(v) => {
+                    if (v.startsWith("__fallback__")) {
+                      setActiveTopicId(null);
+                      setTopic(v.replace("__fallback__", ""));
+                      setCustomTopic("");
+                    } else {
+                      setActiveTopicId(v);
+                    }
+                  }}
+                >
                   <SelectTrigger data-testid="select-topic"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {TOPICS.map((t) => (
-                      <SelectItem key={t} value={t} className="text-sm">{t}</SelectItem>
+                    {libraryTopics.length > 0 && (
+                      <>
+                        {libraryTopics.map((t) => (
+                          <SelectItem key={t.id} value={t.id} className="text-sm">
+                            [{FORMAT_LABELS[t.format]}] {t.resolution}
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                    {FALLBACK_TOPICS.map((t) => (
+                      <SelectItem
+                        key={t}
+                        value={`__fallback__${t}`}
+                        className="text-sm"
+                      >
+                        {t}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <input
                   data-testid="input-custom-topic"
                   value={customTopic}
-                  onChange={(e) => setCustomTopic(e.target.value)}
+                  onChange={(e) => {
+                    setCustomTopic(e.target.value);
+                    if (e.target.value.trim()) setActiveTopicId(null);
+                  }}
                   placeholder="Or write your own resolution…"
                   className="mt-2 w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
+                <div className="mt-2">
+                  <Link
+                    href="/topics"
+                    className="text-xs text-accent hover:underline font-semibold"
+                    data-testid="link-browse-library"
+                  >
+                    Browse the full topic library →
+                  </Link>
+                </div>
               </div>
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 block">
@@ -630,6 +702,9 @@ export default function PracticeBot() {
                     <SelectItem value="LD">Lincoln-Douglas</SelectItem>
                     <SelectItem value="PF">Public Forum</SelectItem>
                     <SelectItem value="Policy">Policy</SelectItem>
+                    <SelectItem value="Parli">Parliamentary</SelectItem>
+                    <SelectItem value="Congress">Congressional</SelectItem>
+                    <SelectItem value="Worlds">World Schools</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

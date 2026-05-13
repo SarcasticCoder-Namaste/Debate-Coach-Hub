@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Menu, X, GraduationCap, Sun, Moon, Monitor, LogIn, Mic } from "lucide-react";
+import { Menu, X, GraduationCap, Sun, Moon, Monitor, LogIn, Mic, Library } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/ThemeProvider";
 import { Link, useLocation } from "wouter";
@@ -81,6 +81,18 @@ export function Navigation() {
               </button>
             )
           )}
+
+          <Link
+            href="/topics"
+            data-testid="nav-link-topics"
+            className={`inline-flex items-center gap-1.5 text-sm font-semibold transition-colors ${
+              isDarkHero
+                ? "text-white/90 hover:text-white"
+                : "text-foreground/80 hover:text-foreground"
+            }`}
+          >
+            <Library className="w-3.5 h-3.5" /> Topics
+          </Link>
 
           <Link
             href="/practice"
@@ -203,6 +215,14 @@ export function Navigation() {
               {item}
             </button>
           ))}
+          <Link
+            href="/topics"
+            data-testid="button-nav-topics"
+            onClick={() => setMobileMenuOpen(false)}
+            className="flex items-center gap-2 text-left text-lg font-semibold text-foreground py-2 border-b border-border/50"
+          >
+            <Library className="w-4 h-4" /> Topics
+          </Link>
           <Link
             href="/practice"
             data-testid="button-nav-practice-bot"

@@ -8,6 +8,8 @@ import { AssistantChatbot } from "@/components/AssistantChatbot";
 import Home from "@/pages/Home";
 import SignIn from "@/pages/SignIn";
 import PracticeBot from "@/pages/PracticeBot";
+import Topics from "@/pages/Topics";
+import TopicDetail from "@/pages/TopicDetail";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -16,6 +18,8 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/signin" component={SignIn} />
       <Route path="/practice" component={PracticeBot} />
+      <Route path="/topics" component={Topics} />
+      <Route path="/topics/:id" component={TopicDetail} />
       <Route component={NotFound} />
     </Switch>
   );

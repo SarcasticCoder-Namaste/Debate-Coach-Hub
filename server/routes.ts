@@ -4,6 +4,7 @@ import OpenAI from "openai";
 import { z } from "zod";
 import { storage } from "./storage";
 import { insertInquirySchema } from "@shared/schema";
+import { TOPICS, getTopicById } from "@shared/topics";
 import { registerPracticeRoutes } from "./practice";
 
 const openai = new OpenAI({
@@ -90,6 +91,16 @@ export async function registerRoutes(
     } catch (error) {
       res.status(400).json({ message: "Invalid inquiry data" });
     }
+  });
+
+  app.get("/api/topics", (_req, res) => {
+    res.json(TOPICS);
+  });
+
+  app.get("/api/topics/:id", (req, res) => {
+    const topic = getTopicById(req.params.id);
+    if (!topic) return res.status(404).json({ message: "Topic not found" });
+    res.json(topic);
   });
 
   registerPracticeRoutes(app);
