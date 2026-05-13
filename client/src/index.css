@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Lato:wght@300;400;700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700;800;900&family=Lato:wght@300;400;700;900&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -20,7 +20,7 @@
   /* Cards and Surfaces */
   --card: 0 0% 100%;
   --card-foreground: 220 20% 15%;
-  
+
   --muted: 210 20% 94%;
   --muted-foreground: 220 15% 45%;
 
@@ -30,8 +30,24 @@
 
   --font-display: 'Playfair Display', serif;
   --font-body: 'Lato', sans-serif;
-  
+
   --radius: 0.5rem;
+}
+
+.dark {
+  --primary: 220 60% 65%;
+  --primary-foreground: 220 30% 10%;
+  --accent: 350 70% 55%;
+  --accent-foreground: 0 0% 100%;
+  --background: 220 25% 8%;
+  --foreground: 210 20% 95%;
+  --card: 220 20% 12%;
+  --card-foreground: 210 20% 95%;
+  --muted: 220 18% 18%;
+  --muted-foreground: 210 15% 60%;
+  --border: 220 15% 22%;
+  --input: 220 15% 22%;
+  --ring: 220 60% 65%;
 }
 
 @layer base {
@@ -42,7 +58,7 @@
 
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);
-    @apply font-bold tracking-tight text-primary;
+    @apply font-bold tracking-tight;
   }
 }
 
@@ -52,7 +68,54 @@
   }
 }
 
-/* Smooth Scrolling Behavior for the whole page */
 html {
   scroll-behavior: smooth;
+}
+
+/* Animated gradient text */
+.gradient-text {
+  background: linear-gradient(90deg, hsl(var(--accent)), hsl(10 80% 60%), hsl(var(--accent)));
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradient-flow 4s linear infinite;
+}
+
+@keyframes gradient-flow {
+  0% { background-position: 0% center; }
+  100% { background-position: 200% center; }
+}
+
+/* Floating orbs */
+@keyframes float-orb {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -50px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
+}
+
+.orb {
+  animation: float-orb 20s ease-in-out infinite;
+}
+
+.orb-delay-1 { animation-delay: -5s; }
+.orb-delay-2 { animation-delay: -10s; }
+.orb-delay-3 { animation-delay: -15s; }
+
+/* Shimmer */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 3s infinite;
+}
+
+/* Counter tick animation helper */
+@keyframes count-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
