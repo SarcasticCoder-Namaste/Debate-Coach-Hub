@@ -42,7 +42,8 @@ export default function SignIn() {
           description: "Your practice rounds will now be saved and shared clips won't expire.",
         });
       }
-      navigate("/practice");
+      const next = new URLSearchParams(window.location.search).get("next");
+      navigate(next && next.startsWith("/") ? next : "/practice");
     } catch (err: any) {
       const msg = String(err?.message || "");
       const friendly = msg.includes("409")

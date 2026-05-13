@@ -13,7 +13,10 @@ export function useAuth() {
       const r = await apiRequest("POST", "/api/auth/signin", vars);
       return (await r.json()) as { user: AuthUser };
     },
-    onSuccess: (d) => queryClient.setQueryData(["/api/auth/me"], { user: d.user }),
+    onSuccess: (d) => {
+      queryClient.setQueryData(["/api/auth/me"], { user: d.user });
+      queryClient.invalidateQueries({ queryKey: ["/api/research"] });
+    },
   });
 
   const signUp = useMutation({
@@ -21,7 +24,10 @@ export function useAuth() {
       const r = await apiRequest("POST", "/api/auth/signup", vars);
       return (await r.json()) as { user: AuthUser };
     },
-    onSuccess: (d) => queryClient.setQueryData(["/api/auth/me"], { user: d.user }),
+    onSuccess: (d) => {
+      queryClient.setQueryData(["/api/auth/me"], { user: d.user });
+      queryClient.invalidateQueries({ queryKey: ["/api/research"] });
+    },
   });
 
   const signOut = useMutation({
@@ -31,6 +37,7 @@ export function useAuth() {
     onSuccess: () => {
       queryClient.setQueryData(["/api/auth/me"], { user: null });
       queryClient.invalidateQueries({ queryKey: ["/api/practice/rounds"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/research"] });
     },
   });
 

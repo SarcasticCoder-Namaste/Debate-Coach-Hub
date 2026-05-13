@@ -48,6 +48,42 @@ function getOwnerKey(res: Response): string {
   return String(res.locals.ownerKey || "");
 }
 
+// The "owner" stored on a research row is one of:
+//   user:<id>   -> belongs to a signed-in account
+//   anon:<hash> -> belongs to an anonymous browser cookie
+// When a signed-in user makes a request we always use their account key.
+// Anonymous packets that match their cookie hash get claimed on first hit.
+function userOwner(userId: number): string {
+  return `user:${userId}`;
+}
+
+async function effectiveOwner(req: Request, res: Response): Promise<string> {
+  const cookieHash = createHash("sha256").update(getOwnerKey(res)).digest("hex");
+  const legacy = cookieHash; // pre-prefix rows stored the bare hash
+  const anon = "anon:" + cookieHash;
+  const userId = req.session?.userId;
+  if (userId) {
+    const account = userOwner(userId);
+    // Migrate any packets created before this user signed in (both the
+    // current `anon:<hash>` rows and any legacy bare-hash rows).
+    try {
+      await storage.claimResearchForUser(anon, account);
+      await storage.claimResearchForUser(legacy, account);
+    } catch (err) {
+      console.warn("[research] claim on sign-in failed:", (err as Error).message);
+    }
+    return account;
+  }
+  // For anonymous visitors, migrate any pre-prefix legacy rows up to the
+  // current `anon:` namespace so they keep showing up on /my-research.
+  try {
+    await storage.claimResearchForUser(legacy, anon);
+  } catch (err) {
+    console.warn("[research] anon legacy claim failed:", (err as Error).message);
+  }
+  return anon;
+}
+
 /* ---------- Safety pre-check ---------- */
 
 const DISALLOWED_PATTERNS = [
@@ -391,11 +427,6 @@ async function generateBundle(opts: {
 
 const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
 
-// Hash the cookie before storing so DB compromise doesn't reveal session tokens.
-function ownerHash(ownerKey: string): string {
-  return createHash("sha256").update(ownerKey).digest("hex");
-}
-
 export function registerResearchRoutes(app: Express) {
   app.use("/api/research", ownerKeyMiddleware);
 
@@ -405,7 +436,7 @@ export function registerResearchRoutes(app: Express) {
       return res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
     }
     const { topic, side, format, depth } = parsed.data;
-    const owner = ownerHash(getOwnerKey(res));
+    const owner = await effectiveOwner(req, res);
 
     const safety = preCheckSafety(topic);
     if (safety.level === "refused") {
@@ -443,8 +474,8 @@ export function registerResearchRoutes(app: Express) {
     }
   });
 
-  app.get("/api/research", async (_req: Request, res: Response) => {
-    const owner = ownerHash(getOwnerKey(res));
+  app.get("/api/research", async (req: Request, res: Response) => {
+    const owner = await effectiveOwner(req, res);
     const rows = await storage.listResearch(owner);
     res.json(
       rows.map((r) => ({
@@ -461,9 +492,9 @@ export function registerResearchRoutes(app: Express) {
   app.get("/api/research/:id", async (req: Request, res: Response) => {
     const parsed = idParamSchema.safeParse(req.params);
     if (!parsed.success) return res.status(400).json({ error: "Invalid id" });
+    const owner = await effectiveOwner(req, res);
     const row = await storage.getResearch(parsed.data.id);
-    if (!row) return res.status(404).json({ error: "Not found" });
-    if (row.userId !== ownerHash(getOwnerKey(res))) {
+    if (!row || row.userId !== owner) {
       return res.status(404).json({ error: "Not found" });
     }
     res.json(row);
@@ -472,9 +503,9 @@ export function registerResearchRoutes(app: Express) {
   app.delete("/api/research/:id", async (req: Request, res: Response) => {
     const parsed = idParamSchema.safeParse(req.params);
     if (!parsed.success) return res.status(400).json({ error: "Invalid id" });
+    const owner = await effectiveOwner(req, res);
     const row = await storage.getResearch(parsed.data.id);
-    if (!row) return res.status(404).json({ error: "Not found" });
-    if (row.userId !== ownerHash(getOwnerKey(res))) {
+    if (!row || row.userId !== owner) {
       return res.status(404).json({ error: "Not found" });
     }
     await storage.deleteResearch(parsed.data.id);

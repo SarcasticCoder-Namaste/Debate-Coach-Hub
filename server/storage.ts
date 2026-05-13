@@ -56,6 +56,7 @@ export interface IStorage {
   getResearch(id: number): Promise<ResearchBundleRow | undefined>;
   listResearch(userId?: string | null): Promise<ResearchBundleRow[]>;
   deleteResearch(id: number): Promise<void>;
+  claimResearchForUser(fromOwner: string, toOwner: string): Promise<number>;
 
   createUser(user: InsertUser): Promise<User>;
   getUserById(id: number): Promise<User | undefined>;
@@ -234,6 +235,16 @@ export class DatabaseStorage implements IStorage {
 
   async deleteResearch(id: number): Promise<void> {
     await db.delete(researchBundles).where(eq(researchBundles.id, id));
+  }
+
+  async claimResearchForUser(fromOwner: string, toOwner: string): Promise<number> {
+    if (!fromOwner || !toOwner || fromOwner === toOwner) return 0;
+    const rows = await db
+      .update(researchBundles)
+      .set({ userId: toOwner })
+      .where(eq(researchBundles.userId, fromOwner))
+      .returning({ id: researchBundles.id });
+    return rows.length;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {

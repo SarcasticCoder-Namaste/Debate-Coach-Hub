@@ -1,8 +1,9 @@
-import { Link } from "wouter";
+import { Link, Redirect } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Navigation } from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { useAuth } from "@/hooks/use-auth";
 import {
   ArrowLeft, Search, FileText, Loader2, ArrowRight, Mic, BookOpen, Sparkles,
 } from "lucide-react";
@@ -25,9 +26,20 @@ function formatDate(d: string) {
 }
 
 export default function Dashboard() {
+  const { user, isLoading: authLoading } = useAuth();
   const { data, isLoading, isError } = useQuery<SavedRow[]>({
     queryKey: ["/api/research"],
+    enabled: !!user,
   });
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+  if (!user) return <Redirect to="/signin?next=/my-research" />;
 
   return (
     <div className="min-h-screen bg-background font-body text-foreground">
