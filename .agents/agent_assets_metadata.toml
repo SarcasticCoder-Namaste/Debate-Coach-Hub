@@ -1,0 +1,32 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "A5_u-6c-_Lh9fAwfvopWL"
+uri = "file://attached_assets/logo/logo-mark-1024.png"
+type = "image"
+title = "Logo mark — 1024×1024 (transparent)"
+
+[[outputs]]
+id = "P9XYgimI0usjSV5-sYABa"
+uri = "file://attached_assets/logo/logo-mark-512.png"
+type = "image"
+title = "Logo mark — 512×512 (transparent)"
+
+[[outputs]]
+id = "rYfuKMQkBE6HzVtkamblh"
+uri = "file://attached_assets/logo/logo-lockup-1920.png"
+type = "image"
+title = "Full lockup — 1920px wide (transparent, navy wordmark)"
+
+[[outputs]]
+id = "HNNDmkz9ETXAUGvRX53SN"
+uri = "file://attached_assets/logo/logo-lockup-800.png"
+type = "image"
+title = "Full lockup — 800px wide (transparent, navy wordmark)"
+
+[[outputs]]
+id = "2WVpkr_DtCm0EYLqnp_FP"
+uri = "file://attached_assets/logo/logo-lockup-onnavy-1920.png"
+type = "image"
+title = "Full lockup — 1920px wide on navy background"
