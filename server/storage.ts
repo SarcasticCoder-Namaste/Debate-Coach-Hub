@@ -10,6 +10,7 @@ import {
   coaches,
   leads,
   savedTopics,
+  coachReferrals,
   type InsertInquiry,
   type Inquiry,
   type InsertPracticeShare,
@@ -32,6 +33,8 @@ import {
   type UpdateLead,
   type InsertSavedTopic,
   type SavedTopic,
+  type InsertCoachReferral,
+  type CoachReferral,
 } from "@shared/schema";
 import { db } from "./db";
 import { and, asc, desc, eq, isNull, lt } from "drizzle-orm";
@@ -69,6 +72,7 @@ export interface IStorage {
     minutes: number,
   ): Promise<Subscription>;
   rolloverMinutesIfNeeded(subscriberId: string): Promise<Subscription>;
+
   createResearch(bundle: InsertResearchBundle): Promise<ResearchBundleRow>;
   getResearch(id: number): Promise<ResearchBundleRow | undefined>;
   listResearch(userId?: string | null): Promise<ResearchBundleRow[]>;
@@ -96,6 +100,8 @@ export interface IStorage {
   listSavedTopics(userId: string): Promise<SavedTopic[]>;
   addSavedTopic(input: InsertSavedTopic): Promise<SavedTopic>;
   removeSavedTopic(userId: string, topicId: string): Promise<void>;
+
+  createCoachReferral(referral: InsertCoachReferral): Promise<CoachReferral>;
 }
 
 function nextPeriodEnd(from: Date, interval: string): Date {
@@ -459,6 +465,11 @@ export class DatabaseStorage implements IStorage {
           eq(savedTopics.topicId, topicId),
         ),
       );
+  }
+
+  async createCoachReferral(referral: InsertCoachReferral): Promise<CoachReferral> {
+    const [row] = await db.insert(coachReferrals).values(referral).returning();
+    return row;
   }
 }
 

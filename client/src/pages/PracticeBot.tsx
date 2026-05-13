@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { queryClient } from "@/lib/queryClient";
 import { type DebateTopic, FORMAT_LABELS, TOPICS } from "@shared/topics";
 import { useSavedTopics } from "@/hooks/use-saved-topics";
 import { motion, AnimatePresence } from "framer-motion";
@@ -23,7 +22,7 @@ import {
   Mic, MicOff, Video, VideoOff, Loader2, Sparkles, Download,
   Volume2, VolumeX, RotateCcw, ArrowLeft, Send, AlertTriangle, Gavel, Languages,
   FileText, Upload, X, BookOpen,
-  Share2, Copy, Check, CalendarDays, Trophy, LogIn, BookmarkCheck,
+  Share2, Copy, Check, CalendarDays, Trophy, BookmarkCheck, Mail,
   ChevronDown, ChevronUp, Clock, Lightbulb, Timer, Pause, Play,
   TrendingUp, ThumbsUp, AlertCircle, Gauge, MessageSquare, Layers, Target, Zap,
   ExternalLink, Quote,
@@ -313,6 +312,13 @@ export default function PracticeBot() {
     queryKey: ["/api/auth/session"],
   });
   const isSignedIn = !!sessionAuth.data?.signedIn;
+  const [shareId, setShareId] = useState<string | null>(null);
+  const [coachEmail, setCoachEmail] = useState("");
+  const [studentName, setStudentName] = useState("");
+  const [studentEmail, setStudentEmail] = useState("");
+  const [coachNote, setCoachNote] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
   // topic packet (session-only)
   const [packet, setPacket] = useState<PacketContext | null>(null);
@@ -922,6 +928,13 @@ export default function PracticeBot() {
     setShareExpiresAt(null);
     setShareCopied(false);
     setSavedSessionId(null);
+    setShareId(null);
+    setCoachEmail("");
+    setStudentName("");
+    setStudentEmail("");
+    setCoachNote("");
+    setEmailSent(false);
+    setSendingEmail(false);
     if (audioRef.current) audioRef.current.pause();
     setBotSpeaking(false);
   }
@@ -1072,13 +1085,15 @@ export default function PracticeBot() {
         const j = await finalizeRes.json().catch(() => ({}));
         throw new Error(j.error || "Could not save share");
       }
-      const { url, expiresAt } = (await finalizeRes.json()) as {
+      const { id: newShareId, url, expiresAt } = (await finalizeRes.json()) as {
+        id: string;
         url: string;
         expiresAt: string | null;
       };
       const fullUrl = window.location.origin + url;
       setShareUrl(fullUrl);
       setShareExpiresAt(expiresAt);
+      setShareId(newShareId);
       toast({ title: "Clip saved", description: "Share the link with your coach." });
     } catch (err) {
       toast({
@@ -1106,6 +1121,50 @@ export default function PracticeBot() {
     const m = Math.floor(sec / 60);
     const s = Math.floor(sec % 60);
     return `Turn ${turnIndex + 1} · ${m}:${s.toString().padStart(2, "0")}`;
+  }
+
+  async function sendToCoach() {
+    if (!shareId || sendingEmail) return;
+    const email = coachEmail.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast({
+        title: "Enter your coach's email",
+        description: "Double-check the address and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSendingEmail(true);
+    try {
+      const res = await fetch(`/api/practice/shares/${shareId}/email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          coachEmail: email,
+          studentName: studentName.trim() || undefined,
+          studentEmail: studentEmail.trim() || undefined,
+          note: coachNote.trim() || undefined,
+        }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(j.error || "Could not send email");
+      }
+      setEmailSent(true);
+      toast({
+        title: "Sent to your coach",
+        description: j.message || "We've delivered the link.",
+      });
+    } catch (err) {
+      toast({
+        title: "Couldn't send email",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingEmail(false);
+    }
   }
 
   /* ---------- render ---------- */
@@ -2067,6 +2126,89 @@ export default function PracticeBot() {
                       </span>
                     )}
                   </div>
+
+                  <div
+                    className="mt-4 pt-4 border-t border-border space-y-3"
+                    data-testid="form-coach-email"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-accent" />
+                      <h4 className="font-semibold text-sm text-primary">
+                        Email this clip to a coach
+                      </h4>
+                    </div>
+                    {emailSent ? (
+                      <div
+                        className="flex items-start gap-2 text-sm text-emerald-700 dark:text-emerald-400"
+                        data-testid="text-email-sent"
+                      >
+                        <Check className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <span>
+                          Sent to <span className="font-mono">{coachEmail}</span>. They'll
+                          get the link, topic, side, and feedback summary.
+                        </span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="grid sm:grid-cols-2 gap-2">
+                          <input
+                            data-testid="input-coach-email"
+                            type="email"
+                            placeholder="coach@example.com"
+                            value={coachEmail}
+                            onChange={(e) => setCoachEmail(e.target.value)}
+                            disabled={sendingEmail}
+                            className="px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                          />
+                          <input
+                            data-testid="input-student-name"
+                            type="text"
+                            placeholder="Your name (optional)"
+                            value={studentName}
+                            onChange={(e) => setStudentName(e.target.value)}
+                            disabled={sendingEmail}
+                            maxLength={120}
+                            className="px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                          />
+                        </div>
+                        <input
+                          data-testid="input-student-email"
+                          type="email"
+                          placeholder="Your email (optional, for replies)"
+                          value={studentEmail}
+                          onChange={(e) => setStudentEmail(e.target.value)}
+                          disabled={sendingEmail}
+                          className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                        />
+                        <textarea
+                          data-testid="input-coach-note"
+                          placeholder="Optional note for your coach…"
+                          value={coachNote}
+                          onChange={(e) => setCoachNote(e.target.value)}
+                          disabled={sendingEmail}
+                          maxLength={1000}
+                          rows={3}
+                          className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 resize-y"
+                        />
+                        <Button
+                          data-testid="button-send-coach-email"
+                          onClick={sendToCoach}
+                          disabled={sendingEmail || !coachEmail.trim()}
+                          className="w-full"
+                          variant="outline"
+                        >
+                          {sendingEmail ? (
+                            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending…</>
+                          ) : (
+                            <><Mail className="w-4 h-4 mr-2" /> Send to coach</>
+                          )}
+                        </Button>
+                        <p className="text-xs text-muted-foreground">
+                          We'll email the link, topic, side, and feedback summary. Limited to a few sends per hour.
+                        </p>
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
             </Card>
@@ -2249,9 +2391,12 @@ export default function PracticeBot() {
           )}
 
           {feedback && (() => {
-            const scores = [feedback.clarity, feedback.structure, feedback.evidence, feedback.delivery]
-              .filter((x): x is { score: number; comment: string } => !!x)
-              .map((x) => x.score);
+            const sub = feedback.subscores;
+            const scores = sub
+              ? [sub.clarity, sub.pace, sub.fillers, sub.structure, sub.rebuttal]
+                  .filter((x) => !!x)
+                  .map((x) => x.score)
+              : [];
             const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
             const lowScore = avg > 0 && avg < 7;
             const coachLink = `/coaches?format=${encodeURIComponent(format)}&score=${avg.toFixed(1)}`;

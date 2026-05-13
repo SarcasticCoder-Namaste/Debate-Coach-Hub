@@ -416,6 +416,28 @@ export const insertResearchBundleSchema = createInsertSchema(researchBundles).om
   createdAt: true,
 });
 
+export const coachReferrals = pgTable("coach_referrals", {
+  id: serial("id").primaryKey(),
+  shareId: text("share_id").notNull(),
+  coachEmail: text("coach_email").notNull(),
+  studentEmail: text("student_email"),
+  studentName: text("student_name"),
+  note: text("note"),
+  shareUrl: text("share_url").notNull(),
+  topic: text("topic").notNull(),
+  side: text("side").notNull(),
+  format: text("format").notNull(),
+  emailStatus: text("email_status").notNull(),
+  emailError: text("email_error"),
+  ipAddress: text("ip_address"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertCoachReferralSchema = createInsertSchema(coachReferrals).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type ResearchBundleRow = typeof researchBundles.$inferSelect;
 export type InsertResearchBundle = z.infer<typeof insertResearchBundleSchema>;
 
@@ -557,3 +579,14 @@ export const insertSavedTopicSchema = createInsertSchema(savedTopics).omit({
 
 export type SavedTopic = typeof savedTopics.$inferSelect;
 export type InsertSavedTopic = z.infer<typeof insertSavedTopicSchema>;
+
+export type CoachReferral = typeof coachReferrals.$inferSelect;
+export type InsertCoachReferral = z.infer<typeof insertCoachReferralSchema>;
+
+export const coachReferralRequestSchema = z.object({
+  coachEmail: z.string().email().max(254),
+  studentName: z.string().trim().max(120).optional(),
+  studentEmail: z.string().email().max(254).optional().or(z.literal("")),
+  note: z.string().trim().max(1000).optional(),
+});
+export type CoachReferralRequest = z.infer<typeof coachReferralRequestSchema>;

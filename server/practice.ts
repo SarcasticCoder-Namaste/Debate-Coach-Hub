@@ -12,7 +12,9 @@ import {
   feedbackPayloadSchema,
   insertPracticeShareSchema,
   insertPracticeShareCommentSchema,
-  turnSchema,
+  coachReferralRequestSchema,
+  type FeedbackReport,
+  type PracticeShare,
 } from "@shared/schema";
 import {
   checkPracticeMinutes,
@@ -106,7 +108,6 @@ import {
   practiceTurnSchema,
   feedbackReportSchema,
   type FillerHit,
-  type FeedbackReport,
 } from "@shared/schema";
 
 const turnSchema = practiceTurnSchema;
@@ -412,6 +413,7 @@ function makeRateLimiter(max: number, windowMs: number) {
 const limitInit = makeRateLimiter(20, 60 * 60 * 1000);     // 20 init / hr / IP
 const limitFinalize = makeRateLimiter(10, 60 * 60 * 1000); // 10 saves / hr / IP
 const limitComment = makeRateLimiter(15, 10 * 60 * 1000);  // 15 comments / 10 min / IP
+const limitReferral = makeRateLimiter(8, 60 * 60 * 1000);  // 8 coach emails / hr / IP
 
 function clientIp(req: Request): string {
   const fwd = req.headers["x-forwarded-for"];
@@ -438,6 +440,174 @@ const finalizeShareSchema = insertPracticeShareSchema.extend({
   feedback: feedbackReportSchema.nullable().optional(),
   uploadToken: z.string().min(10),
 });
+
+/* ------------------ coach referral email ------------------ */
+
+const FORMAT_LONG: Record<string, string> = {
+  LD: "Lincoln-Douglas",
+  PF: "Public Forum",
+  Policy: "Policy",
+  Parli: "Parliamentary",
+  Congress: "Congressional Debate",
+  Worlds: "World Schools",
+};
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function feedbackSummaryLines(fb: FeedbackReport | null | undefined): string[] {
+  if (!fb) return [];
+  const lines = [
+    `Overall ${fb.overallScore}/100`,
+    `Clarity ${fb.subscores.clarity.score}/10 — ${fb.subscores.clarity.comment}`,
+    `Pace ${fb.subscores.pace.score}/10 — ${fb.subscores.pace.comment}`,
+    `Fillers ${fb.subscores.fillers.score}/10 — ${fb.subscores.fillers.comment}`,
+    `Structure ${fb.subscores.structure.score}/10 — ${fb.subscores.structure.comment}`,
+    `Rebuttal ${fb.subscores.rebuttal.score}/10 — ${fb.subscores.rebuttal.comment}`,
+  ];
+  if (fb.strengths.length) lines.push(`Strengths: ${fb.strengths.slice(0, 3).join("; ")}`);
+  if (fb.weaknesses.length) lines.push(`Focus: ${fb.weaknesses.slice(0, 3).join("; ")}`);
+  return lines;
+}
+
+function buildReferralEmail(opts: {
+  share: PracticeShare;
+  shareUrl: string;
+  studentName?: string;
+  studentEmail?: string;
+  note?: string;
+}) {
+  const { share, shareUrl, studentName, studentEmail, note } = opts;
+  const sideLong = share.side === "Aff" ? "Affirmative" : "Negative";
+  const formatLong = FORMAT_LONG[share.format] ?? share.format;
+  const fb = (share.feedback ?? null) as FeedbackReport | null;
+  const fbLines = feedbackSummaryLines(fb);
+  const who = studentName?.trim()
+    ? studentName.trim()
+    : studentEmail?.trim()
+      ? studentEmail.trim()
+      : "A student";
+
+  const subject = `Debate practice clip from ${who} — ${share.topic}`;
+
+  const textParts = [
+    `${who} would like a coach to review their practice round.`,
+    "",
+    `Topic:  ${share.topic}`,
+    `Side:   ${sideLong}`,
+    `Format: ${formatLong}`,
+    "",
+    `Watch the clip: ${shareUrl}`,
+  ];
+  if (note?.trim()) {
+    textParts.push("", "Their note:", note.trim());
+  }
+  if (fbLines.length > 0) {
+    textParts.push("", "Auto-generated feedback summary:", ...fbLines.map((l) => `  - ${l}`));
+  }
+  if (studentEmail?.trim()) {
+    textParts.push("", `Reply-to: ${studentEmail.trim()}`);
+  }
+  textParts.push("", "— Sent via DebateMastery practice bot");
+  const text = textParts.join("\n");
+
+  const fbHtml =
+    fbLines.length > 0
+      ? `<h3 style="margin:24px 0 8px;font-size:14px;color:#333;">Feedback summary</h3><ul style="padding-left:18px;margin:0;color:#444;font-size:14px;line-height:1.5;">${fbLines.map((l) => `<li>${escapeHtml(l)}</li>`).join("")}</ul>`
+      : "";
+  const noteHtml = note?.trim()
+    ? `<h3 style="margin:24px 0 8px;font-size:14px;color:#333;">Note from ${escapeHtml(who)}</h3><p style="white-space:pre-wrap;color:#444;font-size:14px;line-height:1.5;margin:0;">${escapeHtml(note.trim())}</p>`
+    : "";
+  const replyHtml = studentEmail?.trim()
+    ? `<p style="font-size:12px;color:#888;margin-top:24px;">Reply directly to <a href="mailto:${escapeHtml(studentEmail.trim())}">${escapeHtml(studentEmail.trim())}</a>.</p>`
+    : "";
+
+  const html = `<!doctype html><html><body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#f6f7f9;padding:24px;">
+<div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;padding:28px;border:1px solid #e6e8ec;">
+  <h2 style="margin:0 0 8px;font-size:18px;color:#111;">Debate practice clip from ${escapeHtml(who)}</h2>
+  <p style="margin:0 0 16px;color:#555;font-size:14px;">A student is asking you to review their practice round.</p>
+  <table style="border-collapse:collapse;font-size:14px;color:#222;margin-bottom:16px;">
+    <tr><td style="padding:2px 12px 2px 0;color:#777;">Topic</td><td>${escapeHtml(share.topic)}</td></tr>
+    <tr><td style="padding:2px 12px 2px 0;color:#777;">Side</td><td>${escapeHtml(sideLong)}</td></tr>
+    <tr><td style="padding:2px 12px 2px 0;color:#777;">Format</td><td>${escapeHtml(formatLong)}</td></tr>
+  </table>
+  <a href="${escapeHtml(shareUrl)}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;">Watch the clip</a>
+  <p style="font-size:12px;color:#888;margin-top:8px;word-break:break-all;">${escapeHtml(shareUrl)}</p>
+  ${noteHtml}
+  ${fbHtml}
+  ${replyHtml}
+  <p style="font-size:12px;color:#aaa;margin-top:24px;">Sent via DebateMastery practice bot</p>
+</div></body></html>`;
+
+  return { subject, text, html };
+}
+
+type EmailResult = { status: "sent" | "skipped" | "failed"; error?: string };
+
+async function sendCoachEmail(args: {
+  to: string;
+  replyTo?: string;
+  subject: string;
+  text: string;
+  html: string;
+}): Promise<EmailResult> {
+  const sgKey = process.env.SENDGRID_API_KEY;
+  const from =
+    process.env.COACH_REFERRAL_FROM ||
+    process.env.MAIL_FROM ||
+    "no-reply@debatemastery.app";
+
+  if (!sgKey) {
+    console.warn(
+      "[coach-referral] SENDGRID_API_KEY not set — referral recorded but email not sent.",
+    );
+    return { status: "skipped", error: "Email transport not configured" };
+  }
+
+  try {
+    const personalization: Record<string, unknown> = { to: [{ email: args.to }] };
+    const body: Record<string, unknown> = {
+      personalizations: [personalization],
+      from: { email: from, name: "DebateMastery" },
+      subject: args.subject,
+      content: [
+        { type: "text/plain", value: args.text },
+        { type: "text/html", value: args.html },
+      ],
+    };
+    if (args.replyTo) body.reply_to = { email: args.replyTo };
+
+    const resp = await fetch("https://api.sendgrid.com/v3/mail/send", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${sgKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    if (resp.status >= 200 && resp.status < 300) {
+      return { status: "sent" };
+    }
+    const errText = await resp.text().catch(() => "");
+    console.error("[coach-referral] SendGrid error", resp.status, errText);
+    return { status: "failed", error: `SendGrid ${resp.status}` };
+  } catch (err) {
+    console.error("[coach-referral] send exception", err);
+    return { status: "failed", error: err instanceof Error ? err.message : "send failed" };
+  }
+}
+
+function buildShareUrl(req: Request, id: string): string {
+  const proto = (req.headers["x-forwarded-proto"] as string)?.split(",")[0]?.trim() || req.protocol;
+  const host = (req.headers["x-forwarded-host"] as string) || req.headers.host;
+  return `${proto}://${host}/share/${id}`;
+}
 
 // Best-effort cleanup of expired shares. Runs at most every 5 min.
 let lastSweepAt = 0;
@@ -938,6 +1108,84 @@ export function registerPracticeRoutes(app: Express) {
       console.error("share comment create error", err);
       res.status(500).json({ error: "Could not save comment" });
     }
+  });
+
+  // Email a share link to a coach and record the referral for follow-up.
+  app.post("/api/practice/shares/:id/email", async (req: Request, res: Response) => {
+    const ip = clientIp(req);
+    if (!limitReferral(ip)) {
+      return res.status(429).json({ error: "Too many coach emails — please try again later." });
+    }
+    const id = String(req.params.id ?? "");
+    if (!/^[A-Za-z0-9_-]{6,16}$/.test(id)) {
+      return res.status(400).json({ error: "Invalid share id" });
+    }
+    const parsed = coachReferralRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Enter a valid coach email." });
+    }
+    const { coachEmail, studentName, studentEmail, note } = parsed.data;
+
+    const share = await storage.getPracticeShare(id);
+    if (!share) return res.status(404).json({ error: "Share not found" });
+    if (share.expiresAt && share.expiresAt.getTime() < Date.now()) {
+      return res.status(410).json({ error: "This share has expired" });
+    }
+
+    const shareUrl = buildShareUrl(req, share.id);
+    const replyTo = (studentEmail && studentEmail.trim()) || undefined;
+
+    const { subject, text, html } = buildReferralEmail({
+      share,
+      shareUrl,
+      studentName,
+      studentEmail: replyTo,
+      note,
+    });
+
+    const sendResult = await sendCoachEmail({
+      to: coachEmail,
+      replyTo,
+      subject,
+      text,
+      html,
+    });
+
+    try {
+      await storage.createCoachReferral({
+        shareId: share.id,
+        coachEmail: coachEmail.toLowerCase(),
+        studentEmail: replyTo ?? null,
+        studentName: studentName?.trim() || null,
+        note: note?.trim() || null,
+        shareUrl,
+        topic: share.topic,
+        side: share.side,
+        format: share.format,
+        emailStatus: sendResult.status,
+        emailError: sendResult.error ?? null,
+        ipAddress: ip,
+      });
+    } catch (err) {
+      console.error("coach referral persist error", err);
+      return res.status(500).json({ error: "Could not record referral" });
+    }
+
+    if (sendResult.status === "failed") {
+      return res.status(502).json({
+        error: "We saved your request but couldn't send the email. The team will follow up.",
+        status: sendResult.status,
+      });
+    }
+
+    res.status(201).json({
+      ok: true,
+      status: sendResult.status,
+      message:
+        sendResult.status === "sent"
+          ? "Email sent to your coach."
+          : "Saved — the team will deliver this to your coach shortly.",
+    });
   });
 
   // Stream the recorded video/audio for a share. Supports HTTP Range so
