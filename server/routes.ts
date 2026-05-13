@@ -7,6 +7,7 @@ import { insertInquirySchema } from "@shared/schema";
 import { TOPICS, getTopicById } from "@shared/topics";
 import { registerPracticeRoutes } from "./practice";
 import { registerAuthRoutes } from "./auth";
+import { registerBillingRoutes } from "./billing";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -106,6 +107,7 @@ export async function registerRoutes(
 
   registerAuthRoutes(app);
   registerPracticeRoutes(app);
+  registerBillingRoutes(app);
 
   app.post("/api/assistant/chat", async (req, res) => {
     const ip = (req.ip || req.socket.remoteAddress || "unknown").toString();

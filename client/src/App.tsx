@@ -11,6 +11,7 @@ import PracticeBot from "@/pages/PracticeBot";
 import Topics from "@/pages/Topics";
 import TopicDetail from "@/pages/TopicDetail";
 import SharedClip from "@/pages/SharedClip";
+import Pricing from "@/pages/Pricing";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -22,6 +23,7 @@ function Router() {
       <Route path="/topics" component={Topics} />
       <Route path="/topics/:id" component={TopicDetail} />
       <Route path="/share/:id" component={SharedClip} />
+      <Route path="/pricing" component={Pricing} />
       <Route component={NotFound} />
     </Switch>
   );

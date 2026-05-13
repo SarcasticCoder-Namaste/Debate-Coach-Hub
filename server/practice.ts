@@ -13,6 +13,11 @@ import {
   insertPracticeShareSchema,
   turnSchema,
 } from "@shared/schema";
+import {
+  checkPracticeMinutes,
+  recordPracticeMinutes,
+  requireFeature,
+} from "./billing";
 
 const FORMAT_GUIDES: Record<string, string> = {
   LD: "Lincoln-Douglas (1-on-1, value debate, framework + contentions, ~6 min constructive).",
@@ -88,9 +93,16 @@ const FEEDBACK_SCHEMA = z.object({
   evidence: z.object({ score: z.number().min(1).max(10), comment: z.string() }),
   delivery: z.object({ score: z.number().min(1).max(10), comment: z.string() }),
   tip: z.string(),
+  rfd: z
+    .object({
+      decision: z.enum(["Aff", "Neg"]),
+      reason: z.string(),
+      keyVoters: z.array(z.string()).max(5),
+    })
+    .optional(),
 });
 
-const FEEDBACK_PROMPT = `You are a debate coach giving structured feedback on a student's practice round.
+const FEEDBACK_PROMPT_BASIC = `You are a debate coach giving structured feedback on a student's practice round.
 Return ONLY JSON matching this schema, no prose:
 {
   "clarity": { "score": 1-10, "comment": "one short sentence" },
@@ -100,6 +112,22 @@ Return ONLY JSON matching this schema, no prose:
   "tip": "one actionable improvement tip in <= 25 words"
 }
 Be honest and specific. Base scores on the student's turns only, not the bot's.`;
+
+const FEEDBACK_PROMPT_JUDGE = `You are an experienced competitive debate JUDGE writing a Reason For Decision after a practice round.
+Return ONLY JSON matching this schema, no prose:
+{
+  "clarity": { "score": 1-10, "comment": "one short sentence" },
+  "structure": { "score": 1-10, "comment": "one short sentence" },
+  "evidence": { "score": 1-10, "comment": "one short sentence" },
+  "delivery": { "score": 1-10, "comment": "one short sentence" },
+  "tip": "one actionable improvement tip in <= 25 words",
+  "rfd": {
+    "decision": "Aff" | "Neg",
+    "reason": "2-4 sentence judge's RFD explaining why that side won, citing flow",
+    "keyVoters": ["short voter 1", "short voter 2", "short voter 3"]
+  }
+}
+Judge the round on the flow as written. Be decisive — pick a winner.`;
 
 const transcribeSchema = z.object({ audio: z.string().min(1) });
 
@@ -153,6 +181,7 @@ const feedbackSchema = z.object({
   topic: z.string().min(1),
   side: z.enum(["Aff", "Neg"]),
   transcript: z.array(turnSchema).min(1),
+  judgeMode: z.boolean().optional().default(false),
 });
 
 interface AudioReplyMessage {
@@ -301,6 +330,15 @@ export function registerPracticeRoutes(app: Express) {
     if (!parsed.success) return res.status(400).json({ error: "Invalid request" });
     const { topic, side, format, history, voice, packet } = parsed.data;
 
+    // Server-side enforcement: each opponent turn is ~1 minute of practice.
+    const MINUTES_PER_TURN = 1;
+    const gate = await checkPracticeMinutes(req, MINUTES_PER_TURN);
+    if (!gate.ok) {
+      return res
+        .status(gate.status)
+        .json({ error: gate.message, code: gate.code });
+    }
+
     try {
       const messages: ChatCompletionMessageParam[] = [
         { role: "system", content: buildSystemPrompt(topic, side, format, packet) },
@@ -323,6 +361,7 @@ export function registerPracticeRoutes(app: Express) {
         | undefined;
       const transcript: string = message?.audio?.transcript ?? message?.content ?? "";
       const audioB64: string = message?.audio?.data ?? "";
+      await recordPracticeMinutes(req, MINUTES_PER_TURN);
       res.json({ transcript, audio: audioB64 });
     } catch (err) {
       console.error("respond error", err);
@@ -443,11 +482,24 @@ export function registerPracticeRoutes(app: Express) {
     }
   });
 
-  // Structured feedback card from the round transcript.
+  // Structured feedback card. Basic scoring is available on Free; the
+  // Judge-mode RFD output is gated behind the Pro/Team `judgeMode` feature.
   app.post("/api/practice/feedback", async (req: Request, res: Response) => {
     const parsed = feedbackSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "Invalid request" });
-    const { topic, side, transcript } = parsed.data;
+    const { topic, side, transcript, judgeMode } = parsed.data;
+
+    if (judgeMode) {
+      const gate = await requireFeature(req, "judgeMode");
+      if (!gate.ok) {
+        return res
+          .status(gate.status)
+          .json({ error: gate.message, code: gate.code });
+      }
+    }
+    const systemPrompt = judgeMode
+      ? FEEDBACK_PROMPT_JUDGE
+      : FEEDBACK_PROMPT_BASIC;
 
     try {
       const convo = transcript
@@ -457,7 +509,7 @@ export function registerPracticeRoutes(app: Express) {
       const response = await openai.chat.completions.create({
         model: "gpt-5-mini",
         messages: [
-          { role: "system", content: FEEDBACK_PROMPT },
+          { role: "system", content: systemPrompt },
           {
             role: "user",
             content: `Topic: ${topic}\nStudent side: ${side}\n\nRound transcript:\n${convo}`,

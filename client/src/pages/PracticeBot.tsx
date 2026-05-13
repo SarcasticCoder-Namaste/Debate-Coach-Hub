@@ -16,11 +16,12 @@ import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import {
   Mic, MicOff, Video, VideoOff, Loader2, Sparkles, Download,
-  Volume2, RotateCcw, ArrowLeft, Send, AlertTriangle, Star,
+  Volume2, RotateCcw, ArrowLeft, Send, AlertTriangle, Star, Gavel,
   FileText, Upload, X, BookOpen,
   Share2, Copy, Check,
   ChevronDown, ChevronUp, Clock, Lightbulb, Timer, Pause, Play,
 } from "lucide-react";
+import { Paywall, useFeatureAccess } from "@/components/Paywall";
 
 type Side = "Aff" | "Neg";
 type FormatKey = "LD" | "PF" | "Policy" | "Parli" | "Congress" | "Worlds";
@@ -75,6 +76,7 @@ type Feedback = {
   evidence?: { score: number; comment: string };
   delivery?: { score: number; comment: string };
   tip?: string;
+  rfd?: { decision: "Aff" | "Neg"; reason: string; keyVoters: string[] };
 };
 
 const FALLBACK_TOPICS = [
@@ -173,6 +175,8 @@ export default function PracticeBot() {
   const [activeTopicId, setActiveTopicId] = useState<string | null>(
     initialTopicId,
   );
+  const [judgeMode, setJudgeMode] = useState(false);
+  const judgeAllowed = useFeatureAccess("judgeMode");
 
   const { data: libraryTopics = [] } = useQuery<DebateTopic[]>({
     queryKey: ["/api/topics"],
@@ -533,11 +537,28 @@ export default function PracticeBot() {
     if (history.length === 0) return;
     setFeedbackLoading(true);
     try {
+      const useJudge = judgeMode && judgeAllowed;
       const res = await fetch("/api/practice/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: activeTopic, side, transcript: history }),
+        credentials: "include",
+        body: JSON.stringify({
+          topic: activeTopic,
+          side,
+          transcript: history,
+          judgeMode: useJudge,
+        }),
       });
+      if (res.status === 402 || res.status === 403) {
+        const body = await res.json().catch(() => ({}));
+        toast({
+          title: "Upgrade required",
+          description:
+            body?.error ?? "This feature is part of a paid plan.",
+          variant: "destructive",
+        });
+        return;
+      }
       if (!res.ok) throw new Error("feedback failed");
       const data = (await res.json()) as Feedback;
       setFeedback(data);
@@ -876,6 +897,50 @@ export default function PracticeBot() {
                     <SelectItem value="Worlds">World Schools</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="sm:col-span-2 mt-2">
+                <button
+                  data-testid="button-toggle-judge-mode"
+                  onClick={() => {
+                    if (!judgeAllowed) {
+                      // Block activation; the inline paywall below explains why.
+                      return;
+                    }
+                    setJudgeMode((v) => !v);
+                  }}
+                  className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-md border transition-all ${
+                    judgeMode && judgeAllowed
+                      ? "bg-accent/10 border-accent text-foreground"
+                      : "bg-background border-border hover:border-accent/50 text-foreground"
+                  }`}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <Gavel className="w-4 h-4 text-accent" />
+                    <span className="text-sm font-semibold">Live AI Judge mode</span>
+                    <span className="text-xs text-muted-foreground hidden sm:inline">
+                      — get a judge's RFD after the round
+                    </span>
+                  </span>
+                  <span
+                    className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                      judgeMode && judgeAllowed
+                        ? "bg-accent text-white"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {judgeAllowed ? (judgeMode ? "On" : "Off") : "Pro"}
+                  </span>
+                </button>
+                {!judgeAllowed && (
+                  <div className="mt-3">
+                    <Paywall
+                      feature="judgeMode"
+                      title="Live AI Judge mode is a Pro feature"
+                      description="Upgrade to Pro to get a full judge's reason for decision (RFD) at the end of every round."
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </Card>
@@ -1449,11 +1514,44 @@ export default function PracticeBot() {
                   <ScoreRow label="Delivery" item={feedback.delivery} />
                 </div>
                 {feedback.tip && (
-                  <div className="mt-5 pt-4 border-t border-border bg-primary/5 -mx-6 px-6 py-3 rounded-b-lg">
+                  <div className="mt-5 pt-4 border-t border-border bg-primary/5 -mx-6 px-6 py-3">
                     <div className="text-[10px] uppercase tracking-wider font-bold text-accent mb-1">
                       Coach's Tip
                     </div>
                     <p className="text-sm text-foreground" data-testid="text-feedback-tip">{feedback.tip}</p>
+                  </div>
+                )}
+                {feedback.rfd && (
+                  <div
+                    data-testid="card-rfd"
+                    className="mt-0 pt-4 border-t border-border bg-accent/5 -mx-6 px-6 py-4 rounded-b-lg"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-[10px] uppercase tracking-wider font-bold text-accent">
+                        Judge's RFD
+                      </div>
+                      <span
+                        data-testid="text-rfd-decision"
+                        className="text-xs font-bold px-2 py-0.5 rounded bg-accent text-white"
+                      >
+                        {feedback.rfd.decision} wins
+                      </span>
+                    </div>
+                    <p
+                      data-testid="text-rfd-reason"
+                      className="text-sm text-foreground leading-relaxed mb-2"
+                    >
+                      {feedback.rfd.reason}
+                    </p>
+                    {feedback.rfd.keyVoters?.length > 0 && (
+                      <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                        {feedback.rfd.keyVoters.map((v, i) => (
+                          <li key={i} data-testid={`text-rfd-voter-${i}`}>
+                            {v}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 )}
               </Card>

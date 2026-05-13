@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Menu, X, GraduationCap, Sun, Moon, Monitor, LogIn, Mic, Library } from "lucide-react";
+import { Menu, X, GraduationCap, Sun, Moon, Monitor, LogIn, Mic, Library, Tag, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/ThemeProvider";
 import { Link, useLocation } from "wouter";
+import { useCurrentSubscription } from "@/lib/plan";
 
 export function Navigation() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -10,6 +11,8 @@ export function Navigation() {
   const { theme, setTheme, resolved } = useTheme();
   const [location, navigate] = useLocation();
   const onHome = location === "/";
+  const { plan, subscription } = useCurrentSubscription();
+  const onPaidPlan = subscription?.status === "active" && plan.id !== "free";
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
@@ -105,6 +108,28 @@ export function Navigation() {
           >
             <Mic className="w-3.5 h-3.5" /> Practice Bot
           </Link>
+
+          <Link
+            href="/pricing"
+            data-testid="nav-link-pricing"
+            className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors ${
+              isDarkHero
+                ? "text-white/90 hover:text-white"
+                : "text-foreground/80 hover:text-foreground"
+            }`}
+          >
+            <Tag className="w-3.5 h-3.5" /> Pricing
+          </Link>
+
+          {onPaidPlan && (
+            <Link
+              href="/pricing"
+              data-testid="nav-plan-badge"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-accent/10 text-accent text-[11px] font-bold uppercase tracking-wider hover:bg-accent/15 transition-colors"
+            >
+              <Crown className="w-3 h-3" /> {plan.name}
+            </Link>
+          )}
 
           {/* Theme Toggle */}
           <div className="flex items-center gap-1 rounded-full bg-muted p-1 border border-border">
@@ -230,6 +255,19 @@ export function Navigation() {
             className="flex items-center gap-2 text-left text-lg font-semibold text-accent py-2 border-b border-border/50"
           >
             <Mic className="w-4 h-4" /> Practice Bot
+          </Link>
+          <Link
+            href="/pricing"
+            data-testid="button-nav-pricing"
+            onClick={() => setMobileMenuOpen(false)}
+            className="flex items-center gap-2 text-left text-lg font-medium text-foreground py-2 border-b border-border/50"
+          >
+            <Tag className="w-4 h-4" /> Pricing
+            {onPaidPlan && (
+              <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 text-accent text-[10px] font-bold uppercase tracking-wider">
+                <Crown className="w-3 h-3" /> {plan.name}
+              </span>
+            )}
           </Link>
           <Link
             href="/signin"
