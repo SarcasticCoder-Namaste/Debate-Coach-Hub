@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Mic, MicOff, Video, VideoOff, Loader2, Sparkles, Download,
@@ -323,6 +324,16 @@ export default function PracticeBot() {
   }, []);
   const [savedRoundId, setSavedRoundId] = useState<number | null>(null);
   const [savingRound, setSavingRound] = useState(false);
+  const [activeTab, setActiveTab] = useState<"setup" | "briefing" | "practice" | "share">("setup");
+  const goToTab = (tab: "setup" | "briefing" | "practice" | "share") => {
+    setActiveTab(tab);
+    requestAnimationFrame(() => {
+      document.getElementById("round-setup")?.scrollIntoView({
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+        block: "start",
+      });
+    });
+  };
 
   const initialParams = useMemo(() => {
     const p = getQueryParams();
@@ -1558,12 +1569,7 @@ export default function PracticeBot() {
                 <button
                   type="button"
                   data-testid="button-hero-start-round"
-                  onClick={() =>
-                    document.getElementById("round-setup")?.scrollIntoView({
-                      behavior: prefersReducedMotion ? "auto" : "smooth",
-                      block: "start",
-                    })
-                  }
+                  onClick={() => goToTab("setup")}
                   className={`group relative inline-flex items-center gap-2.5 px-6 py-3.5 rounded-full bg-accent text-white text-base font-bold shadow-xl shadow-accent/30 hover:scale-[1.03] active:scale-[0.99] transition-transform overflow-hidden ${prefersReducedMotion ? "" : "pulse-glow"}`}
                 >
                   {!prefersReducedMotion && (
@@ -1671,12 +1677,7 @@ export default function PracticeBot() {
                             key={t.label}
                             type="button"
                             data-testid={`tile-${t.label.toLowerCase().replace(/\s+/g, "-")}`}
-                            onClick={() =>
-                              document.getElementById("round-setup")?.scrollIntoView({
-                                behavior: prefersReducedMotion ? "auto" : "smooth",
-                                block: "start",
-                              })
-                            }
+                            onClick={() => goToTab("setup")}
                             className={`${cls} text-left`}
                           >
                             {inner}
@@ -1744,10 +1745,7 @@ export default function PracticeBot() {
                           setTopic(t.resolution);
                           setActiveTopicId(t.id);
                           setFormat(t.format as FormatKey);
-                          document.getElementById("round-setup")?.scrollIntoView({
-                            behavior: prefersReducedMotion ? "auto" : "smooth",
-                            block: "start",
-                          });
+                          goToTab("setup");
                         }}
                         className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs text-white/85 bg-white/5 border border-white/10 hover:bg-accent/20 hover:border-accent/40 hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                       >
@@ -1786,16 +1784,39 @@ export default function PracticeBot() {
         </section>
       )}
 
-      <section className="container mx-auto max-w-5xl px-4 py-6 grid lg:grid-cols-3 gap-6">
-        {/* LEFT: Setup + Recording */}
-        <div className="lg:col-span-2 space-y-6">
+      <section id="round-setup" className="container mx-auto max-w-5xl px-4 py-6 grid lg:grid-cols-3 gap-6 scroll-mt-24">
+        {/* LEFT: tabbed practice flow */}
+        <div className="lg:col-span-2">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="w-full">
+            <TabsList className="grid w-full grid-cols-4 mb-5 h-auto p-1.5 bg-muted/60 backdrop-blur-sm rounded-xl gap-1">
+              <TabsTrigger value="setup" data-testid="tab-setup" className="flex-col gap-0.5 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-md rounded-lg">
+                <span className="flex items-center gap-1.5 text-sm font-semibold"><Mic className="w-3.5 h-3.5" /> Setup</span>
+                <span className="text-[10px] text-muted-foreground hidden sm:inline">Topic, side, format</span>
+              </TabsTrigger>
+              <TabsTrigger value="briefing" data-testid="tab-briefing" className="flex-col gap-0.5 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-md rounded-lg">
+                <span className="flex items-center gap-1.5 text-sm font-semibold"><BookOpen className="w-3.5 h-3.5" /> Briefing</span>
+                <span className="text-[10px] text-muted-foreground hidden sm:inline">Context & packet</span>
+              </TabsTrigger>
+              <TabsTrigger value="practice" data-testid="tab-practice" className="flex-col gap-0.5 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-md rounded-lg relative">
+                <span className="flex items-center gap-1.5 text-sm font-semibold"><Video className="w-3.5 h-3.5" /> Practice</span>
+                <span className="text-[10px] text-muted-foreground hidden sm:inline">Record & spar</span>
+                {history.length > 0 && (
+                  <span className="absolute top-1 right-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-white text-[10px] font-bold">{history.length}</span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="share" data-testid="tab-share" className="flex-col gap-0.5 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-md rounded-lg">
+                <span className="flex items-center gap-1.5 text-sm font-semibold"><Share2 className="w-3.5 h-3.5" /> Save & Share</span>
+                <span className="text-[10px] text-muted-foreground hidden sm:inline">Keep it · Send it</span>
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent forceMount value="setup" className="space-y-6 m-0 focus-visible:outline-none data-[state=inactive]:hidden" data-testid="tab-content-setup">
           {/* Setup card */}
           <motion.div
-            id="round-setup"
-            initial={{ opacity: 0, y: 24 }}
+            key="setup-card"
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.55, delay: 0.45, ease: [0.22, 1, 0.36, 1] }}
-            className="scroll-mt-24"
+            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
           >
           <Card className="p-6 border-primary/10 shadow-lg shadow-primary/5">
             <div className="flex items-start justify-between gap-3 mb-4">
@@ -2123,6 +2144,19 @@ export default function PracticeBot() {
           </Card>
           </motion.div>
 
+          <div className="flex items-center justify-end pt-2">
+            <button
+              type="button"
+              data-testid="button-next-briefing"
+              onClick={() => setActiveTab("briefing")}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity"
+            >
+              Next: Briefing <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+            </TabsContent>
+
+            <TabsContent forceMount value="briefing" className="space-y-6 m-0 focus-visible:outline-none data-[state=inactive]:hidden" data-testid="tab-content-briefing">
           {/* Standalone speech timer (shown when no library topic is selected) */}
           {!briefingTopic && (
             <Card className="p-6" data-testid="card-speech-timer">
@@ -2536,6 +2570,27 @@ export default function PracticeBot() {
             )}
           </Card>
 
+          <div className="flex items-center justify-between pt-2">
+            <button
+              type="button"
+              data-testid="button-back-setup"
+              onClick={() => setActiveTab("setup")}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" /> Setup
+            </button>
+            <button
+              type="button"
+              data-testid="button-next-practice"
+              onClick={() => setActiveTab("practice")}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-accent text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+            >
+              Start practicing <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+            </TabsContent>
+
+            <TabsContent forceMount value="practice" className="space-y-6 m-0 focus-visible:outline-none data-[state=inactive]:hidden" data-testid="tab-content-practice">
           {/* Recording card */}
           <Card className="p-6">
             <div className="flex items-center justify-between mb-4">
@@ -2662,6 +2717,45 @@ export default function PracticeBot() {
             </Card>
           )}
 
+          <div className="flex items-center justify-between pt-2">
+            <button
+              type="button"
+              data-testid="button-back-briefing"
+              onClick={() => setActiveTab("briefing")}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" /> Briefing
+            </button>
+            <button
+              type="button"
+              data-testid="button-next-share"
+              onClick={() => setActiveTab("share")}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+              disabled={history.length === 0}
+            >
+              Save & share <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+            </TabsContent>
+
+            <TabsContent forceMount value="share" className="space-y-6 m-0 focus-visible:outline-none data-[state=inactive]:hidden" data-testid="tab-content-share">
+          {history.length === 0 && (
+            <Card className="p-8 text-center" data-testid="card-share-empty">
+              <Share2 className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
+              <h3 className="font-display text-lg font-bold text-primary">Nothing to share yet</h3>
+              <p className="text-sm text-muted-foreground mt-1.5 max-w-sm mx-auto">
+                Run a round on the Practice tab — your transcript and recording will appear here, ready to save and share.
+              </p>
+              <button
+                type="button"
+                data-testid="button-empty-go-practice"
+                onClick={() => setActiveTab("practice")}
+                className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-accent text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+              >
+                <Mic className="w-4 h-4" /> Go to Practice
+              </button>
+            </Card>
+          )}
           {/* Save round to My Practice */}
           {history.length > 0 && (
             <Card className="p-6 border-primary/30" data-testid="card-save-history">
@@ -2884,6 +2978,18 @@ export default function PracticeBot() {
               )}
             </Card>
           )}
+          <div className="flex items-center justify-start pt-2">
+            <button
+              type="button"
+              data-testid="button-back-practice"
+              onClick={() => setActiveTab("practice")}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" /> Back to Practice
+            </button>
+          </div>
+            </TabsContent>
+          </Tabs>
         </div>
 
         {/* RIGHT: Prep packet + Transcript + feedback */}
