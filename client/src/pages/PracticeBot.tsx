@@ -31,7 +31,7 @@ import {
   Share2, Copy, Check, CalendarDays, Trophy, BookmarkCheck, Mail,
   ChevronDown, ChevronUp, Clock, Lightbulb, Timer, Pause, Play,
   TrendingUp, ThumbsUp, AlertCircle, Gauge, MessageSquare, Layers, Target, Zap,
-  ExternalLink, Quote, Award, ChevronRight, Users, Flag, Trophy,
+  ExternalLink, Quote, Award, ChevronRight, Users, Flag,
 } from "lucide-react";
 import { Paywall, useFeatureAccess } from "@/components/Paywall";
 import type { FeedbackReport, ResearchBundle } from "@shared/schema";
@@ -334,10 +334,6 @@ export default function PracticeBot() {
   const [shareCopied, setShareCopied] = useState(false);
   const [savingToHistory, setSavingToHistory] = useState(false);
   const [savedSessionId, setSavedSessionId] = useState<string | null>(null);
-  const sessionAuth = useQuery<{ email: string | null; signedIn: boolean }>({
-    queryKey: ["/api/auth/session"],
-  });
-  const isSignedIn = !!sessionAuth.data?.signedIn;
   const [shareId, setShareId] = useState<string | null>(null);
   const [coachEmail, setCoachEmail] = useState("");
   const [studentName, setStudentName] = useState("");

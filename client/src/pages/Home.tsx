@@ -293,55 +293,45 @@ export default function Home() {
               We coach with <span className="text-accent font-semibold">AI</span> — practice live rounds, get instant feedback on your arguments, delivery, and structure, and walk into tournaments ready to win.
             </motion.p>
 
-            {/* CTAs */}
-            <motion.div variants={staggerChild} className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start pt-2">
-              <Button
-                onClick={scrollToContact}
-                size="lg"
-                data-testid="button-hero-start-free"
-                className="bg-accent text-white hover:bg-accent/90 text-lg h-14 px-8 rounded-xl shadow-xl shadow-black/20 transition-transform hover:-translate-y-1"
-              >
-                Start Practicing Free
-              </Button>
-              <Link href="/research" data-testid="link-hero-research">
+            {/* CTAs — streamlined: AI Practice Bot is the hero action */}
+            <motion.div variants={staggerChild} className="flex flex-col sm:flex-row flex-wrap gap-4 justify-center lg:justify-start pt-2">
+              <Link href="/practice" data-testid="link-hero-practice-bot" className="w-full sm:w-auto">
                 <Button
-                  variant="outline"
                   size="lg"
-                  className="bg-transparent border-white/30 text-white hover:bg-white/10 text-lg h-14 px-8 rounded-xl backdrop-blur-sm w-full sm:w-auto"
+                  className="bg-accent text-white hover:bg-accent/90 text-base md:text-lg h-14 px-7 rounded-xl shadow-xl shadow-black/20 transition-transform hover:-translate-y-1 w-full sm:w-auto"
                 >
-                  <Search className="w-5 h-5 mr-2 text-accent" />
-                  Research a Topic
-                </Button>
-              </Link>
-              <Link href="/practice" data-testid="link-hero-practice-bot">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="bg-transparent border-white/30 text-white hover:bg-white/10 text-lg h-14 px-8 rounded-xl backdrop-blur-sm w-full sm:w-auto"
-                >
-                  <Mic className="w-5 h-5 mr-2 text-accent" />
+                  <Mic className="w-5 h-5 mr-2" />
                   Try the AI Practice Bot
-                </Button>
-              </Link>
-              <Link href="/coaches" data-testid="link-hero-book-coach">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="bg-transparent border-white/30 text-white hover:bg-white/10 text-lg h-14 px-8 rounded-xl backdrop-blur-sm w-full sm:w-auto"
-                >
-                  <Calendar className="w-5 h-5 mr-2 text-accent" />
-                  Book a Coach
                 </Button>
               </Link>
               <Button
                 variant="outline"
                 size="lg"
                 data-testid="button-hero-how-it-works"
-                className="bg-transparent border-white/30 text-white hover:bg-white/10 text-lg h-14 px-8 rounded-xl backdrop-blur-sm"
+                className="bg-transparent border-white/30 text-white hover:bg-white/10 text-base md:text-lg h-14 px-7 rounded-xl backdrop-blur-sm w-full sm:w-auto"
                 onClick={() => scrollToSection("how-it-works")}
               >
                 See How It Works
               </Button>
+            </motion.div>
+
+            {/* Tertiary text links — kept low-key so coaches stay optional */}
+            <motion.div variants={staggerChild} className="flex flex-wrap items-center justify-center lg:justify-start gap-x-5 gap-y-2 text-sm text-white/70">
+              <Link href="/research" data-testid="link-hero-research" className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
+                <Search className="w-4 h-4 text-accent" /> Research a topic
+              </Link>
+              <span className="text-white/20">·</span>
+              <button
+                onClick={scrollToContact}
+                data-testid="button-hero-start-free"
+                className="inline-flex items-center gap-1.5 hover:text-white transition-colors"
+              >
+                Start free
+              </button>
+              <span className="text-white/20">·</span>
+              <Link href="/coaches" data-testid="link-hero-book-coach" className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
+                <Calendar className="w-4 h-4 text-accent" /> Prefer a human coach?
+              </Link>
             </motion.div>
 
             {/* Trust badges */}

@@ -1,10 +1,11 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AssistantChatbot } from "@/components/AssistantChatbot";
+import { useAuth } from "@/hooks/use-auth";
 import Home from "@/pages/Home";
 import SignIn from "@/pages/SignIn";
 import PracticeBot from "@/pages/PracticeBot";
@@ -25,10 +26,23 @@ import TeamJoin from "@/pages/TeamJoin";
 import TeamSession from "@/pages/TeamSession";
 import NotFound from "@/pages/not-found";
 
+function HomeOrPractice() {
+  const { user, isLoading } = useAuth();
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="h-8 w-8 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+  if (user) return <Redirect to="/practice" />;
+  return <Home />;
+}
+
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Home} />
+      <Route path="/" component={HomeOrPractice} />
       <Route path="/signin" component={SignIn} />
       <Route path="/practice" component={PracticeBot} />
       <Route path="/topics" component={Topics} />

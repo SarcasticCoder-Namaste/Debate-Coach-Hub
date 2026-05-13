@@ -72,7 +72,7 @@ export function Navigation() {
         </div>
 
         {/* Desktop Links */}
-        <div className="hidden lg:flex items-center gap-5">
+        <div className="hidden xl:flex items-center gap-3">
           {/* In-page marketing anchors — only show on the home page to avoid clutter on app pages */}
           {onHome &&
             ["About", "Services", "How It Works", "FAQ"].map((item) => (
@@ -181,18 +181,6 @@ export function Navigation() {
           )}
 
           <Link
-            href="/coaches"
-            data-testid="nav-link-coaches"
-            className={`inline-flex items-center gap-1.5 text-sm font-semibold transition-colors ${
-              isDarkHero
-                ? "text-white hover:text-accent"
-                : "text-foreground/80 hover:text-foreground"
-            }`}
-          >
-            <CalendarDays className="w-3.5 h-3.5" /> Book a Coach
-          </Link>
-
-          <Link
             href="/pricing"
             data-testid="nav-link-pricing"
             className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
@@ -272,7 +260,7 @@ export function Navigation() {
         </div>
 
         {/* Mobile Menu Toggle */}
-        <div className="lg:hidden flex items-center gap-2">
+        <div className="xl:hidden flex items-center gap-2">
           <button
             onClick={() =>
               setTheme(resolved === "light" ? "dark" : "light")
@@ -302,7 +290,7 @@ export function Navigation() {
 
       {/* Mobile Menu */}
       {mobileMenuOpen && (
-        <div className="lg:hidden absolute top-full left-0 right-0 bg-background border-b border-border shadow-xl p-4 flex flex-col gap-4 animate-in slide-in-from-top-5 max-h-[85vh] overflow-y-auto">
+        <div className="xl:hidden absolute top-full left-0 right-0 bg-background border-b border-border shadow-xl p-4 flex flex-col gap-4 animate-in slide-in-from-top-5 max-h-[85vh] overflow-y-auto">
           {[
             "Home",
             "About",
