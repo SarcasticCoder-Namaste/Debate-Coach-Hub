@@ -1,0 +1,762 @@
+import { useEffect, useRef, useState } from "react";
+import { Link } from "wouter";
+import { motion, AnimatePresence } from "framer-motion";
+import { Navigation } from "@/components/Navigation";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Card } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Mic, MicOff, Video, VideoOff, Loader2, Sparkles, Download,
+  Volume2, RotateCcw, ArrowLeft, Send, AlertTriangle, Star,
+} from "lucide-react";
+
+type Side = "Aff" | "Neg";
+type FormatKey = "LD" | "PF" | "Policy";
+type Turn = { role: "user" | "assistant"; content: string };
+
+interface SpeechRecognitionAlternativeLike {
+  transcript: string;
+}
+interface SpeechRecognitionResultLike {
+  isFinal: boolean;
+  length: number;
+  [index: number]: SpeechRecognitionAlternativeLike;
+}
+interface SpeechRecognitionResultListLike {
+  length: number;
+  [index: number]: SpeechRecognitionResultLike;
+}
+interface SpeechRecognitionEventLike {
+  resultIndex: number;
+  results: SpeechRecognitionResultListLike;
+}
+interface SpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((e: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((e: unknown) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+}
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as {
+    SpeechRecognition?: SpeechRecognitionCtor;
+    webkitSpeechRecognition?: SpeechRecognitionCtor;
+  };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+type Feedback = {
+  clarity?: { score: number; comment: string };
+  structure?: { score: number; comment: string };
+  evidence?: { score: number; comment: string };
+  delivery?: { score: number; comment: string };
+  tip?: string;
+};
+
+const TOPICS = [
+  "Resolved: The United States ought to provide a universal basic income.",
+  "Resolved: Public colleges and universities ought not consider standardized tests in admissions.",
+  "Resolved: The development of artificial general intelligence is, on balance, beneficial.",
+  "Resolved: In the United States, the right to be forgotten outweighs the freedom of the press.",
+  "Resolved: Just governments ought to ensure food security for their citizens.",
+];
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1] || "");
+    r.onerror = reject;
+    r.readAsDataURL(blob);
+  });
+}
+
+function pickSupportedMime(audioOnly: boolean): string {
+  const list = audioOnly
+    ? ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"]
+    : ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
+  if (typeof MediaRecorder === "undefined" || !MediaRecorder.isTypeSupported) return "";
+  for (const m of list) if (MediaRecorder.isTypeSupported(m)) return m;
+  return "";
+}
+
+/* ---------- pulse waveform ---------- */
+function Pulse({ active }: { active: boolean }) {
+  return (
+    <div className="flex items-end justify-center gap-1.5 h-12">
+      {Array.from({ length: 9 }).map((_, i) => (
+        <motion.span
+          key={i}
+          className="w-1.5 rounded-full bg-accent"
+          animate={
+            active
+              ? { height: ["20%", "100%", "30%", "80%", "20%"] }
+              : { height: "20%" }
+          }
+          transition={{
+            duration: 0.9 + (i % 3) * 0.2,
+            repeat: active ? Infinity : 0,
+            ease: "easeInOut",
+            delay: i * 0.06,
+          }}
+          style={{ height: "20%" }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ScoreRow({ label, item }: { label: string; item?: { score: number; comment: string } }) {
+  if (!item) return null;
+  return (
+    <div data-testid={`feedback-${label.toLowerCase()}`}>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-sm font-semibold text-foreground">{label}</span>
+        <div className="flex items-center gap-1">
+          <Star className="w-3.5 h-3.5 text-accent fill-accent" />
+          <span className="text-sm font-bold text-accent">{item.score}/10</span>
+        </div>
+      </div>
+      <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden mb-1.5">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${item.score * 10}%` }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          className="h-full bg-gradient-to-r from-primary to-accent rounded-full"
+        />
+      </div>
+      <p className="text-xs text-muted-foreground leading-relaxed">{item.comment}</p>
+    </div>
+  );
+}
+
+export default function PracticeBot() {
+  const { toast } = useToast();
+
+  // setup
+  const [topic, setTopic] = useState(TOPICS[0]);
+  const [customTopic, setCustomTopic] = useState("");
+  const [side, setSide] = useState<Side>("Aff");
+  const [format, setFormat] = useState<FormatKey>("LD");
+  const [cameraEnabled, setCameraEnabled] = useState(false);
+
+  // round state
+  const [history, setHistory] = useState<Turn[]>([]);
+  const [recording, setRecording] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [botSpeaking, setBotSpeaking] = useState(false);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [textFallback, setTextFallback] = useState("");
+  const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [liveTranscript, setLiveTranscript] = useState<string>("");
+
+  // refs
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const livePreviewRef = useRef<HTMLVideoElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const videoMimeRef = useRef<string>("");
+  const speechRecRef = useRef<SpeechRecognitionLike | null>(null);
+  const speechFinalRef = useRef<string>("");
+
+  const activeTopic = customTopic.trim() || topic;
+
+  // Stop media tracks on unmount only.
+  useEffect(() => {
+    return () => {
+      mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+      mediaStreamRef.current = null;
+    };
+  }, []);
+
+  // Revoke the previous blob URL when videoUrl changes or on unmount.
+  useEffect(() => {
+    return () => {
+      if (videoUrl) URL.revokeObjectURL(videoUrl);
+    };
+  }, [videoUrl]);
+
+  /* ---------- camera live preview toggle ---------- */
+  useEffect(() => {
+    let cancelled = false;
+    async function setup() {
+      if (!cameraEnabled) {
+        mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+        mediaStreamRef.current = null;
+        if (livePreviewRef.current) livePreviewRef.current.srcObject = null;
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        mediaStreamRef.current = stream;
+        if (livePreviewRef.current) {
+          livePreviewRef.current.srcObject = stream;
+          livePreviewRef.current.muted = true;
+          livePreviewRef.current.play().catch(() => {});
+        }
+        setPermissionError(null);
+      } catch (err: any) {
+        setCameraEnabled(false);
+        setPermissionError(
+          "Camera or microphone access was denied. Enable permissions in your browser to record video, or use the mic-only or text mode below."
+        );
+      }
+    }
+    setup();
+    return () => { cancelled = true; };
+  }, [cameraEnabled]);
+
+  /* ---------- start / stop recording ---------- */
+  function startLiveTranscript() {
+    const Ctor = getSpeechRecognitionCtor();
+    if (!Ctor) return;
+    try {
+      const rec = new Ctor();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = "en-US";
+      speechFinalRef.current = "";
+      setLiveTranscript("");
+      rec.onresult = (e) => {
+        let interim = "";
+        let finalAdd = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const r = e.results[i];
+          const text = r[0]?.transcript ?? "";
+          if (r.isFinal) finalAdd += text;
+          else interim += text;
+        }
+        if (finalAdd) speechFinalRef.current = (speechFinalRef.current + " " + finalAdd).trim();
+        setLiveTranscript((speechFinalRef.current + " " + interim).trim());
+      };
+      rec.onerror = () => {};
+      rec.onend = () => {};
+      rec.start();
+      speechRecRef.current = rec;
+    } catch {
+      speechRecRef.current = null;
+    }
+  }
+
+  function stopLiveTranscript(): string {
+    const rec = speechRecRef.current;
+    if (rec) {
+      try { rec.stop(); } catch {}
+    }
+    speechRecRef.current = null;
+    return speechFinalRef.current.trim();
+  }
+
+  async function startRecording() {
+    setPermissionError(null);
+    setFeedback(null);
+    try {
+      let stream = mediaStreamRef.current;
+      const tracksLive = (s: MediaStream | null) =>
+        !!s && s.getTracks().length > 0 && s.getTracks().every((t) => t.readyState === "live");
+      const hasLiveAudio = !!stream && stream.getAudioTracks().some((t) => t.readyState === "live");
+      const hasLiveVideo = !!stream && stream.getVideoTracks().some((t) => t.readyState === "live");
+      const needsRefresh =
+        !tracksLive(stream) || !hasLiveAudio || (cameraEnabled && !hasLiveVideo);
+
+      if (needsRefresh) {
+        stream?.getTracks().forEach((t) => t.stop());
+        stream = await navigator.mediaDevices.getUserMedia(
+          cameraEnabled ? { video: true, audio: true } : { audio: true }
+        );
+        mediaStreamRef.current = stream;
+        if (cameraEnabled && livePreviewRef.current) {
+          livePreviewRef.current.srcObject = stream;
+          livePreviewRef.current.muted = true;
+          livePreviewRef.current.play().catch(() => {});
+        }
+      }
+
+      if (!stream) throw new Error("No media stream");
+      const mime = pickSupportedMime(!cameraEnabled);
+      videoMimeRef.current = mime;
+      const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      recorderRef.current = recorder;
+      chunksRef.current = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      recorder.start(250);
+      startLiveTranscript();
+      setRecording(true);
+    } catch (err: any) {
+      setPermissionError(
+        "Microphone access was denied. Please enable it in your browser, or type your speech below."
+      );
+    }
+  }
+
+  async function stopRecording() {
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state === "inactive") return;
+    setRecording(false);
+    setProcessing(true);
+
+    const finished = new Promise<Blob>((resolve) => {
+      recorder.onstop = () => {
+        const type = videoMimeRef.current || (cameraEnabled ? "video/webm" : "audio/webm");
+        resolve(new Blob(chunksRef.current, { type }));
+      };
+    });
+    recorder.stop();
+    const blob = await finished;
+    const liveText = stopLiveTranscript();
+
+    // Save replayable video
+    if (cameraEnabled && blob.size > 0) {
+      if (videoUrl) URL.revokeObjectURL(videoUrl);
+      setVideoUrl(URL.createObjectURL(blob));
+    }
+
+    // Prefer the browser's live transcript when available — it's already final.
+    if (liveText && liveText.split(/\s+/).length >= 3) {
+      setLiveTranscript("");
+      await sendUserTurn(liveText);
+      return;
+    }
+
+    // Fallback: send audio to server STT.
+    try {
+      const base64 = await blobToBase64(blob);
+      const tr = await fetch("/api/practice/transcribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audio: base64 }),
+      });
+      if (!tr.ok) throw new Error("transcribe failed");
+      const { text } = (await tr.json()) as { text: string };
+      if (!text?.trim()) {
+        toast({ title: "Couldn't hear you", description: "No speech detected — try again or use text mode.", variant: "destructive" });
+        setProcessing(false);
+        setLiveTranscript("");
+        return;
+      }
+      setLiveTranscript("");
+      await sendUserTurn(text);
+    } catch (err) {
+      toast({ title: "Transcription error", description: "Please try again.", variant: "destructive" });
+      setProcessing(false);
+      setLiveTranscript("");
+    }
+  }
+
+  /* ---------- send turn (audio or text) ---------- */
+  async function sendUserTurn(userText: string) {
+    setProcessing(true);
+    const nextHistory: Turn[] = [...history, { role: "user", content: userText }];
+    setHistory(nextHistory);
+
+    try {
+      const res = await fetch("/api/practice/respond", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: activeTopic,
+          side,
+          format,
+          history: nextHistory,
+        }),
+      });
+      if (!res.ok) throw new Error("bot failed");
+      const { transcript, audio } = (await res.json()) as { transcript: string; audio: string };
+      setHistory([...nextHistory, { role: "assistant", content: transcript }]);
+      if (audio && audioRef.current) {
+        audioRef.current.src = `data:audio/mp3;base64,${audio}`;
+        audioRef.current.onplay = () => setBotSpeaking(true);
+        audioRef.current.onended = () => setBotSpeaking(false);
+        audioRef.current.onpause = () => setBotSpeaking(false);
+        audioRef.current.play().catch(() => {});
+      }
+    } catch (err) {
+      toast({ title: "Bot response failed", description: "Please try again.", variant: "destructive" });
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  async function submitTextFallback() {
+    const t = textFallback.trim();
+    if (!t || processing) return;
+    setTextFallback("");
+    await sendUserTurn(t);
+  }
+
+  /* ---------- feedback ---------- */
+  async function getFeedback() {
+    if (history.length === 0) return;
+    setFeedbackLoading(true);
+    try {
+      const res = await fetch("/api/practice/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: activeTopic, side, transcript: history }),
+      });
+      if (!res.ok) throw new Error("feedback failed");
+      const data = (await res.json()) as Feedback;
+      setFeedback(data);
+    } catch {
+      toast({ title: "Feedback unavailable", description: "Please try again.", variant: "destructive" });
+    } finally {
+      setFeedbackLoading(false);
+    }
+  }
+
+  function resetRound() {
+    setHistory([]);
+    setFeedback(null);
+    setLiveTranscript("");
+    speechFinalRef.current = "";
+    if (videoUrl) { URL.revokeObjectURL(videoUrl); setVideoUrl(null); }
+    if (audioRef.current) audioRef.current.pause();
+    setBotSpeaking(false);
+  }
+
+  /* ---------- render ---------- */
+  const supportsMedia = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
+
+  return (
+    <div className="min-h-screen bg-background font-body text-foreground" data-testid="page-practice-bot">
+      <Navigation />
+      <audio ref={audioRef} hidden />
+
+      {/* Hero strip */}
+      <section className="relative pt-32 pb-10 px-4 overflow-hidden bg-primary">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="orb orb-delay-1 absolute -top-24 -right-24 w-[500px] h-[500px] bg-accent/20 rounded-full blur-[100px]" />
+          <div className="orb orb-delay-2 absolute -bottom-20 left-1/4 w-[400px] h-[400px] bg-white/[0.05] rounded-full blur-[90px]" />
+        </div>
+        <div className="container relative z-10 mx-auto max-w-5xl">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-white/70 hover:text-white text-sm mb-4 transition-colors"
+            data-testid="link-back-home"
+          >
+            <ArrowLeft className="w-4 h-4" /> Back to home
+          </Link>
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/20 text-white/90 text-xs font-medium mb-3">
+            <Sparkles className="w-3.5 h-3.5 text-accent" /> AI Practice Round
+          </div>
+          <h1 className="text-3xl md:text-5xl font-display font-bold text-white leading-tight">
+            Spar With An <span className="gradient-text">AI Opponent.</span>
+          </h1>
+          <p className="text-white/75 mt-3 max-w-2xl">
+            Pick a resolution, choose your side, and run a live round. Get spoken counter-arguments
+            and a structured feedback card after every speech.
+          </p>
+        </div>
+      </section>
+
+      <section className="container mx-auto max-w-5xl px-4 py-10 grid lg:grid-cols-3 gap-6">
+        {/* LEFT: Setup + Recording */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Setup card */}
+          <Card className="p-6">
+            <h2 className="font-display text-xl font-bold text-primary mb-4">Round Setup</h2>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 block">
+                  Resolution / Topic
+                </label>
+                <Select value={topic} onValueChange={setTopic}>
+                  <SelectTrigger data-testid="select-topic"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {TOPICS.map((t) => (
+                      <SelectItem key={t} value={t} className="text-sm">{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <input
+                  data-testid="input-custom-topic"
+                  value={customTopic}
+                  onChange={(e) => setCustomTopic(e.target.value)}
+                  placeholder="Or write your own resolution…"
+                  className="mt-2 w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 block">
+                  You Are
+                </label>
+                <div className="flex gap-2">
+                  {(["Aff", "Neg"] as Side[]).map((s) => (
+                    <button
+                      key={s}
+                      data-testid={`button-side-${s.toLowerCase()}`}
+                      onClick={() => setSide(s)}
+                      className={`flex-1 py-2 rounded-md text-sm font-semibold border transition-all ${
+                        side === s
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-background border-border hover:border-primary"
+                      }`}
+                    >
+                      {s === "Aff" ? "Affirmative" : "Negative"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 block">
+                  Format
+                </label>
+                <Select value={format} onValueChange={(v) => setFormat(v as FormatKey)}>
+                  <SelectTrigger data-testid="select-format"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="LD">Lincoln-Douglas</SelectItem>
+                    <SelectItem value="PF">Public Forum</SelectItem>
+                    <SelectItem value="Policy">Policy</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </Card>
+
+          {/* Recording card */}
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-xl font-bold text-primary">Your Speech</h2>
+              <button
+                data-testid="button-toggle-camera"
+                onClick={() => setCameraEnabled((v) => !v)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                  cameraEnabled
+                    ? "bg-accent text-accent-foreground border-accent"
+                    : "bg-background border-border hover:border-accent text-foreground"
+                }`}
+              >
+                {cameraEnabled ? <Video className="w-3.5 h-3.5" /> : <VideoOff className="w-3.5 h-3.5" />}
+                Camera {cameraEnabled ? "on" : "off"}
+              </button>
+            </div>
+
+            {cameraEnabled && (
+              <div className="relative mb-4 rounded-xl overflow-hidden bg-black aspect-video border border-border">
+                <video
+                  ref={livePreviewRef}
+                  data-testid="video-live-preview"
+                  className="w-full h-full object-cover"
+                  playsInline
+                />
+                {recording && (
+                  <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/60 text-white text-xs px-2.5 py-1 rounded-full">
+                    <span className="w-2 h-2 rounded-full bg-accent animate-pulse" /> REC
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col items-center gap-4 py-4">
+              <Pulse active={recording || botSpeaking} />
+              <button
+                data-testid="button-record"
+                onClick={recording ? stopRecording : startRecording}
+                disabled={!supportsMedia || processing}
+                className={`relative w-24 h-24 rounded-full text-white flex items-center justify-center shadow-2xl transition-all ${
+                  recording
+                    ? "bg-accent hover:bg-accent/90 scale-105"
+                    : "bg-primary hover:bg-primary/90 hover:scale-105"
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                aria-label={recording ? "Stop recording" : "Start recording"}
+              >
+                {processing ? (
+                  <Loader2 className="w-9 h-9 animate-spin" />
+                ) : recording ? (
+                  <MicOff className="w-9 h-9" />
+                ) : (
+                  <Mic className="w-9 h-9" />
+                )}
+                {recording && (
+                  <span className="absolute inset-0 rounded-full border-4 border-accent/40 animate-ping" />
+                )}
+              </button>
+              <p className="text-sm text-muted-foreground text-center max-w-sm">
+                {recording
+                  ? "Recording… click again when you're done."
+                  : processing
+                  ? "Thinking through a counter-argument…"
+                  : botSpeaking
+                  ? "Opponent is speaking — listen carefully."
+                  : "Click the mic and deliver your speech as you would in-round."}
+              </p>
+            </div>
+
+            {permissionError && (
+              <div className="mt-2 flex items-start gap-2 p-3 rounded-lg bg-accent/10 border border-accent/30 text-sm text-foreground" data-testid="text-permission-error">
+                <AlertTriangle className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
+                <span>{permissionError}</span>
+              </div>
+            )}
+
+            {/* Text fallback */}
+            <div className="mt-5 pt-5 border-t border-border">
+              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 block">
+                Text mode (fallback)
+              </label>
+              <div className="flex gap-2">
+                <input
+                  data-testid="input-text-fallback"
+                  value={textFallback}
+                  onChange={(e) => setTextFallback(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") submitTextFallback(); }}
+                  placeholder="Type your speech here and press Enter…"
+                  disabled={processing}
+                  className="flex-1 px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <Button
+                  data-testid="button-send-text"
+                  onClick={submitTextFallback}
+                  disabled={!textFallback.trim() || processing}
+                  className="bg-primary"
+                >
+                  <Send className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </Card>
+
+          {/* Replay video */}
+          {videoUrl && (
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-display text-lg font-bold text-primary">Replay your last speech</h3>
+                <a
+                  href={videoUrl}
+                  download={`practice-round-${Date.now()}.webm`}
+                  className="inline-flex items-center gap-1.5 text-sm text-primary hover:text-accent font-semibold"
+                  data-testid="link-download-video"
+                >
+                  <Download className="w-4 h-4" /> Download
+                </a>
+              </div>
+              <video
+                data-testid="video-replay"
+                src={videoUrl}
+                controls
+                className="w-full rounded-xl bg-black aspect-video"
+              />
+            </Card>
+          )}
+        </div>
+
+        {/* RIGHT: Transcript + feedback */}
+        <div className="space-y-6">
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-display text-xl font-bold text-primary">Transcript</h2>
+              {history.length > 0 && (
+                <button
+                  data-testid="button-reset-round"
+                  onClick={resetRound}
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  <RotateCcw className="w-3 h-3" /> Reset
+                </button>
+              )}
+            </div>
+            <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+              {history.length === 0 && (
+                <p className="text-sm text-muted-foreground italic">
+                  Your speech and the bot's reply will appear here.
+                </p>
+              )}
+              <AnimatePresence initial={false}>
+                {history.map((t, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25 }}
+                    data-testid={`transcript-turn-${i}`}
+                    className={`p-3 rounded-lg text-sm leading-relaxed ${
+                      t.role === "user"
+                        ? "bg-primary/10 border-l-4 border-primary"
+                        : "bg-accent/10 border-l-4 border-accent"
+                    }`}
+                  >
+                    <div className={`text-[10px] uppercase tracking-wider font-bold mb-1 ${
+                      t.role === "user" ? "text-primary" : "text-accent"
+                    }`}>
+                      {t.role === "user" ? "You" : "Opponent"}
+                    </div>
+                    <div className="text-foreground/90">{t.content}</div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+              {(recording || liveTranscript) && liveTranscript && (
+                <div
+                  data-testid="text-live-transcript"
+                  className="p-3 rounded-lg text-sm leading-relaxed bg-primary/5 border-l-4 border-primary/40"
+                >
+                  <div className="text-[10px] uppercase tracking-wider font-bold mb-1 text-primary/70 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                    You (live)
+                  </div>
+                  <div className="text-foreground/70 italic">{liveTranscript}</div>
+                </div>
+              )}
+            </div>
+            <Button
+              data-testid="button-get-feedback"
+              onClick={getFeedback}
+              disabled={history.length === 0 || feedbackLoading}
+              className="w-full mt-4 bg-accent hover:bg-accent/90 text-accent-foreground"
+            >
+              {feedbackLoading ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Scoring…</>
+              ) : (
+                <><Sparkles className="w-4 h-4 mr-2" /> Get Feedback Card</>
+              )}
+            </Button>
+          </Card>
+
+          {feedback && (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              <Card className="p-6 border-accent/40" data-testid="card-feedback">
+                <h3 className="font-display text-lg font-bold text-primary mb-4 flex items-center gap-2">
+                  <Volume2 className="w-5 h-5 text-accent" /> Coach Feedback
+                </h3>
+                <div className="space-y-4">
+                  <ScoreRow label="Clarity" item={feedback.clarity} />
+                  <ScoreRow label="Structure" item={feedback.structure} />
+                  <ScoreRow label="Evidence" item={feedback.evidence} />
+                  <ScoreRow label="Delivery" item={feedback.delivery} />
+                </div>
+                {feedback.tip && (
+                  <div className="mt-5 pt-4 border-t border-border bg-primary/5 -mx-6 px-6 py-3 rounded-b-lg">
+                    <div className="text-[10px] uppercase tracking-wider font-bold text-accent mb-1">
+                      Coach's Tip
+                    </div>
+                    <p className="text-sm text-foreground" data-testid="text-feedback-tip">{feedback.tip}</p>
+                  </div>
+                )}
+              </Card>
+            </motion.div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}

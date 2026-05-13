@@ -2,6 +2,7 @@ import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { insertInquirySchema } from "@shared/schema";
+import { registerPracticeRoutes } from "./practice";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -16,6 +17,8 @@ export async function registerRoutes(
       res.status(400).json({ message: "Invalid inquiry data" });
     }
   });
+
+  registerPracticeRoutes(app);
 
   return httpServer;
 }

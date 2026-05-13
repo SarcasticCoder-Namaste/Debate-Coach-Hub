@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
-import { Link } from "wouter";
-import { Menu, X, GraduationCap, Sun, Moon, Monitor, LogIn } from "lucide-react";
+import { Menu, X, GraduationCap, Sun, Moon, Monitor, LogIn, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/ThemeProvider";
+import { Link, useLocation } from "wouter";
 
 export function Navigation() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { theme, setTheme, resolved } = useTheme();
+  const [location, navigate] = useLocation();
+  const onHome = location === "/";
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
@@ -16,6 +18,14 @@ export function Navigation() {
   }, []);
 
   const scrollToSection = (id: string) => {
+    if (!onHome) {
+      navigate("/");
+      setTimeout(() => {
+        document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+      }, 80);
+      setMobileMenuOpen(false);
+      return;
+    }
     const element = document.getElementById(id);
     if (element) {
       element.scrollIntoView({ behavior: "smooth" });
@@ -71,6 +81,18 @@ export function Navigation() {
               </button>
             )
           )}
+
+          <Link
+            href="/practice"
+            data-testid="nav-link-practice-bot"
+            className={`inline-flex items-center gap-1.5 text-sm font-semibold transition-colors ${
+              isDarkHero
+                ? "text-white hover:text-accent"
+                : "text-accent hover:text-accent/80"
+            }`}
+          >
+            <Mic className="w-3.5 h-3.5" /> Practice Bot
+          </Link>
 
           {/* Theme Toggle */}
           <div className="flex items-center gap-1 rounded-full bg-muted p-1 border border-border">
@@ -181,6 +203,14 @@ export function Navigation() {
               {item}
             </button>
           ))}
+          <Link
+            href="/practice"
+            data-testid="button-nav-practice-bot"
+            onClick={() => setMobileMenuOpen(false)}
+            className="flex items-center gap-2 text-left text-lg font-semibold text-accent py-2 border-b border-border/50"
+          >
+            <Mic className="w-4 h-4" /> Practice Bot
+          </Link>
           <Link
             href="/signin"
             data-testid="link-mobile-signin"

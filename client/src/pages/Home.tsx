@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { Link } from "wouter";
 import { motion, useInView, useMotionValue, useTransform, animate, useScroll, useSpring } from "framer-motion";
 import { Navigation } from "@/components/Navigation";
 import { ServiceCard } from "@/components/ServiceCard";
@@ -132,7 +133,7 @@ function NewsletterForm() {
 /* ------------------------------------------------------------------ */
 /*  Floating Chat CTA                                                  */
 /* ------------------------------------------------------------------ */
-function FloatingChatCTA({ onCta }: { onCta: () => void }) {
+function FloatingChatCTA({ onCta, onPractice }: { onCta: () => void; onPractice: () => void }) {
   const [open, setOpen] = useState(false);
   const [show, setShow] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -190,13 +191,20 @@ function FloatingChatCTA({ onCta }: { onCta: () => void }) {
             </div>
           </div>
           <p className="text-sm text-foreground/80 mb-4">
-            Have a quick question about coaching or want to book a free 20-minute consult?
+            Try our brand-new AI Practice Bot, or book a free 20-minute consult.
           </p>
           <button
             ref={popupCtaRef}
+            onClick={() => { onPractice(); setOpen(false); triggerRef.current?.focus(); }}
+            data-testid="button-chat-practice"
+            className="w-full mb-2 px-4 py-2.5 rounded-full bg-accent text-white text-sm font-semibold hover:bg-accent/90 transition-all flex items-center justify-center gap-2"
+          >
+            <MessageCircle className="w-4 h-4" /> Try the Practice Bot
+          </button>
+          <button
             onClick={() => { onCta(); setOpen(false); triggerRef.current?.focus(); }}
             data-testid="button-chat-cta"
-            className="w-full px-4 py-2.5 rounded-full bg-accent text-white text-sm font-semibold hover:bg-accent/90 transition-all"
+            className="w-full px-4 py-2.5 rounded-full bg-primary/10 text-primary text-sm font-semibold hover:bg-primary/20 transition-all"
           >
             Book Free Consult
           </button>
@@ -396,6 +404,16 @@ export default function Home() {
               >
                 Start Practicing Free
               </Button>
+              <Link href="/practice" data-testid="link-hero-practice-bot">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="bg-transparent border-white/30 text-white hover:bg-white/10 text-lg h-14 px-8 rounded-xl backdrop-blur-sm w-full sm:w-auto"
+                >
+                  <Mic className="w-5 h-5 mr-2 text-accent" />
+                  Try the AI Practice Bot
+                </Button>
+              </Link>
               <Button
                 variant="outline"
                 size="lg"
@@ -1115,7 +1133,7 @@ export default function Home() {
       </footer>
 
       {/* Floating Chat Bubble */}
-      <FloatingChatCTA onCta={scrollToContact} />
+      <FloatingChatCTA onCta={scrollToContact} onPractice={() => (window.location.href = "/practice")} />
 
       {/* Back to top */}
       {showTopBtn && (

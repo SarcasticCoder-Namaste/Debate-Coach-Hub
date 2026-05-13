@@ -14,6 +14,7 @@ declare module "http" {
 
 app.use(
   express.json({
+    limit: "25mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
@@ -33,10 +34,30 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+const SENSITIVE_FIELDS = new Set(["audio", "transcript", "text", "tip"]);
+const MAX_LOG_BODY_CHARS = 500;
+const NO_BODY_LOG_PREFIXES = ["/api/practice/"];
+
+function redactForLog(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactForLog);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (SENSITIVE_FIELDS.has(k)) {
+        out[k] = typeof v === "string" ? `[redacted ${v.length} chars]` : "[redacted]";
+      } else {
+        out[k] = redactForLog(v);
+      }
+    }
+    return out;
+  }
+  return value;
+}
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+  let capturedJsonResponse: unknown;
 
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
@@ -48,10 +69,14 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+      const skipBody = NO_BODY_LOG_PREFIXES.some((p) => path.startsWith(p));
+      if (capturedJsonResponse && !skipBody) {
+        let snippet = JSON.stringify(redactForLog(capturedJsonResponse));
+        if (snippet.length > MAX_LOG_BODY_CHARS) {
+          snippet = snippet.slice(0, MAX_LOG_BODY_CHARS) + "…[truncated]";
+        }
+        logLine += ` :: ${snippet}`;
       }
-
       log(logLine);
     }
   });
