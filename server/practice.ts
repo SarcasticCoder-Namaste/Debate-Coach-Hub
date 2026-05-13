@@ -14,6 +14,7 @@ import {
   recordPracticeMinutes,
   requireFeature,
 } from "./billing";
+import { LANGUAGES, LANGUAGE_CODES, type LanguageCode } from "@shared/languages";
 
 const FORMAT_GUIDES: Record<string, string> = {
   LD: "Lincoln-Douglas (1-on-1, value debate, framework + contentions, ~6 min constructive).",
@@ -27,10 +28,21 @@ const FORMAT_GUIDES: Record<string, string> = {
 const VOICES = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"] as const;
 type Voice = (typeof VOICES)[number];
 
+const languageSchema = z.enum(LANGUAGE_CODES as [LanguageCode, ...LanguageCode[]]).default("en");
+
+function languageInstruction(lang: LanguageCode): string {
+  const cfg = LANGUAGES[lang];
+  if (lang === "en") {
+    return "Speak and write entirely in English.";
+  }
+  return `Speak and write entirely in ${cfg.promptName}. Every word of your response — including any proper nouns you cite — must be rendered in ${cfg.promptName}. Do not switch to English at any point. Maintain natural, native-level fluency in ${cfg.promptName}.`;
+}
+
 function buildSystemPrompt(
   topic: string,
   side: "Aff" | "Neg",
   format: string,
+  lang: LanguageCode,
   packet?: PacketContext | null,
 ) {
   const opposing = side === "Aff" ? "Negative" : "Affirmative";
@@ -59,6 +71,8 @@ ${packet.excerpt}
 Resolution / Topic: "${topic}"
 Student is debating: ${side === "Aff" ? "Affirmative" : "Negative"}
 Format: ${FORMAT_GUIDES[format] ?? format}${packetBlock}
+
+Language requirement: ${languageInstruction(lang)}
 
 Your job each turn:
 1. Listen to the student's speech.
@@ -107,7 +121,7 @@ const SUBSCORE_LLM_SCHEMA = z.object({
     .optional(),
 });
 
-const FEEDBACK_PROMPT = `You are a debate coach giving structured, honest feedback on a student's practice round.
+const FEEDBACK_PROMPT_BASE = `You are a debate coach giving structured, honest feedback on a student's practice round.
 You will receive: the resolution, the student's side, and the round transcript labeled by speaker.
 Score ONLY the student's speeches. Be specific and reference what they actually said.
 
@@ -120,9 +134,7 @@ Return ONLY JSON matching exactly this schema, no prose:
   "weaknesses": ["1-3 short bullets"]
 }`;
 
-const FEEDBACK_PROMPT_JUDGE = `${FEEDBACK_PROMPT}
-
-Additionally, because the user has enabled JUDGE MODE, also include a Reason For Decision field "rfd" in the JSON, decisively picking a winning side based on the flow as written:
+const JUDGE_RFD_BLOCK = `Additionally, because the user has enabled JUDGE MODE, also include a Reason For Decision field "rfd" in the JSON, decisively picking a winning side based on the flow as written:
 {
   "rfd": {
     "decision": "Aff" | "Neg",
@@ -131,6 +143,24 @@ Additionally, because the user has enabled JUDGE MODE, also include a Reason For
   }
 }
 Be decisive — pick a winner.`;
+
+function feedbackLanguageTail(lang: LanguageCode, includeRfd: boolean): string {
+  const fields = includeRfd
+    ? "comments, suggestions, strengths, weaknesses, rfd.reason, rfd.keyVoters"
+    : "comments, suggestions, strengths, weaknesses";
+  const enumNote = includeRfd
+    ? ` and the rfd.decision enum ("Aff" | "Neg")`
+    : "";
+  return `\n\nLanguage requirement for ALL human-readable string values (${fields}):\n${languageInstruction(lang)}\nThe JSON KEYS${enumNote} must remain exactly as shown above in English; only the other string VALUES are translated.`;
+}
+
+function feedbackPrompt(lang: LanguageCode): string {
+  return `${FEEDBACK_PROMPT_BASE}${feedbackLanguageTail(lang, false)}`;
+}
+
+function feedbackPromptJudge(lang: LanguageCode): string {
+  return `${FEEDBACK_PROMPT_BASE}\n\n${JUDGE_RFD_BLOCK}${feedbackLanguageTail(lang, true)}`;
+}
 
 /* ---------- metric helpers (deterministic, computed server-side) ---------- */
 const FILLER_PATTERNS: Array<{ word: string; re: RegExp }> = [
@@ -249,7 +279,10 @@ function computeOverall(subs: Record<string, { score: number }>): number {
   return Math.round(total);
 }
 
-const transcribeSchema = z.object({ audio: z.string().min(1) });
+const transcribeSchema = z.object({
+  audio: z.string().min(1),
+  language: languageSchema,
+});
 
 const respondSchema = z.object({
   topic: z.string().min(1),
@@ -258,6 +291,7 @@ const respondSchema = z.object({
   history: z.array(turnSchema).default([]),
   voice: z.enum(VOICES).default("onyx"),
   packet: packetContextSchema.nullish(),
+  language: languageSchema,
 });
 
 const packetIngestSchema = z
@@ -302,6 +336,7 @@ const feedbackSchema = z.object({
   side: z.enum(["Aff", "Neg"]),
   transcript: z.array(turnSchema).min(1),
   judgeMode: z.boolean().optional().default(false),
+  language: languageSchema,
 });
 
 interface AudioReplyMessage {
@@ -436,7 +471,7 @@ export function registerPracticeRoutes(app: Express) {
     try {
       const raw = Buffer.from(parsed.data.audio, "base64");
       const { buffer, format } = await ensureCompatibleFormat(raw);
-      const text = await speechToText(buffer, format);
+      const text = await speechToText(buffer, format, parsed.data.language);
       res.json({ text });
     } catch (err) {
       console.error("transcribe error", err);
@@ -444,11 +479,10 @@ export function registerPracticeRoutes(app: Express) {
     }
   });
 
-  // Generate a debate-coach counter-argument with synthesized voice.
   app.post("/api/practice/respond", async (req: Request, res: Response) => {
     const parsed = respondSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "Invalid request" });
-    const { topic, side, format, history, voice, packet } = parsed.data;
+    const { topic, side, format, history, voice, packet, language } = parsed.data;
 
     // Server-side enforcement: each opponent turn is ~1 minute of practice.
     const MINUTES_PER_TURN = 1;
@@ -461,7 +495,7 @@ export function registerPracticeRoutes(app: Express) {
 
     try {
       const messages: ChatCompletionMessageParam[] = [
-        { role: "system", content: buildSystemPrompt(topic, side, format, packet) },
+        { role: "system", content: buildSystemPrompt(topic, side, format, language, packet) },
         ...history.map<ChatCompletionMessageParam>((m) => ({
           role: m.role,
           content: m.content,
@@ -607,7 +641,7 @@ export function registerPracticeRoutes(app: Express) {
   app.post("/api/practice/feedback", async (req: Request, res: Response) => {
     const parsed = feedbackSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "Invalid request" });
-    const { topic, side, transcript, judgeMode } = parsed.data;
+    const { topic, side, transcript, judgeMode, language } = parsed.data;
 
     if (judgeMode) {
       const gate = await requireFeature(req, "judgeMode");
@@ -617,7 +651,9 @@ export function registerPracticeRoutes(app: Express) {
           .json({ error: gate.message, code: gate.code });
       }
     }
-    const systemPrompt = judgeMode ? FEEDBACK_PROMPT_JUDGE : FEEDBACK_PROMPT;
+    const systemPrompt = judgeMode
+      ? feedbackPromptJudge(language)
+      : feedbackPrompt(language);
 
     const userTurns = transcript.filter((t) => t.role === "user");
     const userWords = userTurns.reduce((acc, t) => acc + countWords(t.content), 0);
@@ -653,7 +689,7 @@ export function registerPracticeRoutes(app: Express) {
           { role: "system", content: systemPrompt },
           {
             role: "user",
-            content: `Topic: ${topic}\nStudent side: ${side}\n\nRound transcript:\n${convo}`,
+            content: `Topic: ${topic}\nStudent side: ${side}\nLanguage: ${LANGUAGES[language].promptName}\n\nRound transcript:\n${convo}`,
           },
         ],
         response_format: { type: "json_object" },

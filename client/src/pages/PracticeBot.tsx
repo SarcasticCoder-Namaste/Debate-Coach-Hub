@@ -19,7 +19,7 @@ import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import {
   Mic, MicOff, Video, VideoOff, Loader2, Sparkles, Download,
-  Volume2, RotateCcw, ArrowLeft, Send, AlertTriangle, Gavel,
+  Volume2, RotateCcw, ArrowLeft, Send, AlertTriangle, Gavel, Languages,
   FileText, Upload, X, BookOpen,
   Share2, Copy, Check,
   ChevronDown, ChevronUp, Clock, Lightbulb, Timer, Pause, Play,
@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { Paywall, useFeatureAccess } from "@/components/Paywall";
 import type { FeedbackReport, ResearchBundle } from "@shared/schema";
+import { LANGUAGES, LANGUAGE_CODES, topicsForLanguage, type LanguageCode } from "@shared/languages";
 
 type Side = "Aff" | "Neg";
 type FormatKey = "LD" | "PF" | "Policy" | "Parli" | "Congress" | "Worlds";
@@ -78,13 +79,15 @@ type PacketStats = { characters: number; truncated: boolean; source: "pdf" | "do
 
 type Feedback = FeedbackReport;
 
-const FALLBACK_TOPICS = [
-  "Resolved: The United States ought to provide a universal basic income.",
+const ENGLISH_EXTRA_TOPICS = [
   "Resolved: Public colleges and universities ought not consider standardized tests in admissions.",
-  "Resolved: The development of artificial general intelligence is, on balance, beneficial.",
   "Resolved: In the United States, the right to be forgotten outweighs the freedom of the press.",
-  "Resolved: Just governments ought to ensure food security for their citizens.",
 ];
+
+function topicsForUi(lang: LanguageCode): string[] {
+  const translated = topicsForLanguage(lang).map((t) => t.resolution);
+  return lang === "en" ? [...translated, ...ENGLISH_EXTRA_TOPICS] : translated;
+}
 
 function getQueryParam(name: string): string | null {
   if (typeof window === "undefined") return null;
@@ -217,6 +220,7 @@ export default function PracticeBot() {
 
   // setup
   const initialTopicId = getQueryParam("topicId");
+  const [language, setLanguage] = useState<LanguageCode>("en");
   const [topic, setTopic] = useState(initialParams.topic && !TOPICS.some(t => t.resolution === initialParams.topic) ? initialParams.topic : initialParams.topic || TOPICS[0].resolution);
   const [customTopic, setCustomTopic] = useState(
     initialParams.topic && !TOPICS.some(t => t.resolution === initialParams.topic) ? initialParams.topic : ""
@@ -259,6 +263,8 @@ export default function PracticeBot() {
   const prep = researchQuery.data?.bundle ?? null;
   const [prepOpen, setPrepOpen] = useState(true);
   const [prepSection, setPrepSection] = useState<"sources" | "evidence" | "case">("sources");
+
+  const availableTopics = topicsForUi(language);
 
   // round state
   const [history, setHistory] = useState<Turn[]>([]);
@@ -387,6 +393,19 @@ export default function PracticeBot() {
       ? "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30"
       : "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30";
 
+  // When the language changes, swap to that language's topic list and clear
+  // any in-progress round so the bot doesn't mix languages mid-conversation.
+  useEffect(() => {
+    setTopic(topicsForUi(language)[0]);
+    setCustomTopic("");
+    setHistory([]);
+    setFeedback(null);
+    setLiveTranscript("");
+    speechFinalRef.current = "";
+    if (audioRef.current) audioRef.current.pause();
+    setBotSpeaking(false);
+  }, [language]);
+
   // Stop media tracks on unmount only.
   useEffect(() => {
     return () => {
@@ -444,7 +463,7 @@ export default function PracticeBot() {
       const rec = new Ctor();
       rec.continuous = true;
       rec.interimResults = true;
-      rec.lang = "en-US";
+      rec.lang = LANGUAGES[language].bcp47;
       speechFinalRef.current = "";
       setLiveTranscript("");
       rec.onresult = (e) => {
@@ -565,7 +584,7 @@ export default function PracticeBot() {
       const tr = await fetch("/api/practice/transcribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audio: base64 }),
+        body: JSON.stringify({ audio: base64, language }),
       });
       if (!tr.ok) throw new Error("transcribe failed");
       const { text } = (await tr.json()) as { text: string };
@@ -606,6 +625,7 @@ export default function PracticeBot() {
           format,
           history: nextHistory,
           packet,
+          language,
         }),
       });
       if (!res.ok) throw new Error("bot failed");
@@ -648,6 +668,7 @@ export default function PracticeBot() {
           side,
           transcript: history,
           judgeMode: useJudge,
+          language,
         }),
       });
       if (res.status === 402 || res.status === 403) {
@@ -1017,7 +1038,7 @@ export default function PracticeBot() {
                 >
                   <SelectTrigger data-testid="select-topic"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {libraryTopics.length > 0 && (
+                    {language === "en" && libraryTopics.length > 0 && (
                       <>
                         {libraryTopics.map((t) => (
                           <SelectItem key={t.id} value={t.id} className="text-sm">
@@ -1026,7 +1047,7 @@ export default function PracticeBot() {
                         ))}
                       </>
                     )}
-                    {FALLBACK_TOPICS.map((t) => (
+                    {availableTopics.map((t) => (
                       <SelectItem
                         key={t}
                         value={`__fallback__${t}`}
@@ -1100,6 +1121,29 @@ export default function PracticeBot() {
                     <SelectItem value="Worlds">World Schools</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 flex items-center gap-1.5">
+                  <Languages className="w-3.5 h-3.5" /> Practice Language
+                </label>
+                <Select value={language} onValueChange={(v) => setLanguage(v as LanguageCode)}>
+                  <SelectTrigger data-testid="select-language"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {LANGUAGE_CODES.map((code) => (
+                      <SelectItem
+                        key={code}
+                        value={code}
+                        data-testid={`option-language-${code}`}
+                        className="text-sm"
+                      >
+                        {LANGUAGES[code].label} — {LANGUAGES[code].nativeLabel}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  The opponent's voice, your transcription, and the feedback card will all use the selected language. Switching languages resets the round.
+                </p>
               </div>
 
               <div className="sm:col-span-2 mt-2">
@@ -2064,7 +2108,7 @@ export default function PracticeBot() {
                     </div>
                   </div>
                 )}
-                {feedback.rfd && (
+                {feedback.rfd && typeof feedback.rfd === "object" && (
                   <div
                     data-testid="card-rfd"
                     className="mt-0 pt-4 border-t border-border bg-accent/5 -mx-6 px-6 py-4 rounded-b-lg"
