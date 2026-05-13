@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { motion, useInView, useMotionValue, useTransform, animate } from "framer-motion";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { motion, useInView, useMotionValue, useTransform, animate, useScroll, useSpring } from "framer-motion";
 import { Navigation } from "@/components/Navigation";
 import { ServiceCard } from "@/components/ServiceCard";
 import { ContactForm } from "@/components/ContactForm";
@@ -8,7 +8,8 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/
 import {
   Users, Trophy, Mic, Quote, CheckCircle2, Calendar, ArrowRight,
   GraduationCap, BookOpen, FileText, MessageSquare, Award, Star,
-  ShieldCheck, Clock3, ArrowUp, Search, Target, Zap
+  ShieldCheck, Clock3, ArrowUp, Search, Target, Zap,
+  Megaphone, Gavel, Scale, CalendarDays, MapPin
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -76,6 +77,72 @@ const staggerChild = {
 };
 
 /* ------------------------------------------------------------------ */
+/*  Typewriter Effect                                                  */
+/* ------------------------------------------------------------------ */
+function Typewriter({ text, speed = 60, delay = 0, className = "" }: { text: string; speed?: number; delay?: number; className?: string }) {
+  const [displayed, setDisplayed] = useState("");
+  const [done, setDone] = useState(false);
+  useEffect(() => {
+    let i = 0;
+    const start = setTimeout(() => {
+      const timer = setInterval(() => {
+        setDisplayed(text.slice(0, i + 1));
+        i++;
+        if (i >= text.length) { clearInterval(timer); setDone(true); }
+      }, speed);
+      return () => clearInterval(timer);
+    }, delay);
+    return () => clearTimeout(start);
+  }, [text, speed, delay]);
+  return (
+    <span className={className}>
+      {displayed}
+      {!done && <span className="inline-block w-[2px] h-[1em] bg-current ml-1 animate-pulse align-middle" />}
+    </span>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Scroll Progress Bar                                                */
+/* ------------------------------------------------------------------ */
+function ScrollProgress() {
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, { stiffness: 100, damping: 30, restDelta: 0.001 });
+  return (
+    <motion.div
+      className="fixed top-0 left-0 right-0 h-1 bg-accent origin-left z-[60]"
+      style={{ scaleX }}
+    />
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Spotlight Card Effect                                              */
+/* ------------------------------------------------------------------ */
+function SpotlightCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ x: 0, y: 0, active: false });
+  const onMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    setPos({ x: e.clientX - rect.left, y: e.clientY - rect.top, active: true });
+  }, []);
+  return (
+    <div
+      ref={ref}
+      onMouseMove={onMove}
+      onMouseLeave={() => setPos((p) => ({ ...p, active: false }))}
+      className={`relative overflow-hidden ${className}`}
+      style={{ background: pos.active
+        ? `radial-gradient(600px circle at ${pos.x}px ${pos.y}px, hsl(var(--accent) / 0.12), transparent 40%)`
+        : undefined }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Section wrapper with scroll reveal                               */
 /* ------------------------------------------------------------------ */
 function Section({
@@ -126,6 +193,9 @@ export default function Home() {
     <div className="min-h-screen bg-background font-body text-foreground overflow-x-hidden">
       <Navigation />
 
+      {/* Reading Progress Bar */}
+      <ScrollProgress />
+
       {/* ===================== HERO ===================== */}
       <section
         id="home"
@@ -157,8 +227,11 @@ export default function Home() {
 
             {/* Headline */}
             <motion.h1 variants={staggerChild} className="text-4xl md:text-6xl lg:text-7xl font-display font-bold text-white leading-[1.05]">
-              Win More Debates. <br />
-              <span className="gradient-text">Speak With Confidence.</span>
+              <Typewriter text="Win More Debates." speed={70} />
+              <br />
+              <span className="gradient-text">
+                <Typewriter text="Speak With Confidence." speed={70} delay={900} />
+              </span>
             </motion.h1>
 
             {/* Subtitle */}
@@ -292,6 +365,25 @@ export default function Home() {
         </div>
       </Section>
 
+      {/* ===================== MARQUEE STRIP ===================== */}
+      <div className="bg-accent py-4 overflow-hidden relative">
+        <motion.div
+          animate={{ x: [0, -1000] }}
+          transition={{ repeat: Infinity, duration: 20, ease: "linear" }}
+          className="flex gap-12 whitespace-nowrap text-white/90 font-medium text-sm tracking-widest uppercase"
+        >
+          {[...Array(10)].map((_, i) => (
+            <span key={i} className="flex items-center gap-3">
+              <Trophy className="w-4 h-4" /> State Finalist Coach
+              <Star className="w-4 h-4" /> 4.9/5 Student Rating
+              <ShieldCheck className="w-4 h-4" /> 90% Tournament Break Rate
+              <Award className="w-4 h-4" /> 150+ Students Coached
+              <Zap className="w-4 h-4" /> 10+ Years Experience
+            </span>
+          ))}
+        </motion.div>
+      </div>
+
       {/* ===================== SERVICES ===================== */}
       <Section id="services" className="py-24" bg="bg-muted/40">
         <div className="text-center mb-16">
@@ -402,6 +494,104 @@ export default function Home() {
               <div className="text-sm font-bold text-accent mb-2">Step {item.step}</div>
               <h3 className="text-xl font-bold text-primary mb-2">{item.title}</h3>
               <p className="text-muted-foreground text-sm">{item.desc}</p>
+            </motion.div>
+          ))}
+        </motion.div>
+      </Section>
+
+      {/* ===================== STATS ===================== */}
+      {/* ===================== DEBATE FORMATS ===================== */}
+      <Section id="formats" className="py-24" bg="bg-background">
+        <div className="text-center mb-16">
+          <motion.span variants={fadeInUp} custom={0} className="text-accent font-bold tracking-wider uppercase text-sm">
+            What We Coach
+          </motion.span>
+          <motion.h2 variants={fadeInUp} custom={0.1} className="text-3xl md:text-5xl font-display font-bold text-primary mt-2 mb-4">
+            Debate Formats Covered
+          </motion.h2>
+          <motion.p variants={fadeInUp} custom={0.15} className="text-muted-foreground max-w-2xl mx-auto">
+            Expert-level coaching across all major competitive debate formats.
+          </motion.p>
+        </div>
+
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-50px" }}
+          className="grid md:grid-cols-3 gap-6"
+        >
+          {[
+            { icon: Gavel, title: "Lincoln-Douglas", desc: "Value-based one-on-one debate focusing on philosophical frameworks, ethical reasoning, and persuasive speaking.", level: "Beginner to Advanced", color: "from-amber-500/20 to-orange-500/20" },
+            { icon: Scale, title: "Public Forum", desc: "Accessible team debate on current events. Emphasis on clear argumentation, evidence analysis, and rebuttal strategy.", level: "All Skill Levels", color: "from-emerald-500/20 to-teal-500/20" },
+            { icon: Megaphone, title: "Policy Debate", desc: "High-speed, evidence-intensive format. Deep dive into complex policy analysis, counterplans, and kritiks.", level: "Intermediate to Elite", color: "from-sky-500/20 to-blue-500/20" },
+          ].map((fmt) => (
+            <motion.div key={fmt.title} variants={staggerChild}>
+              <SpotlightCard className="h-full p-8 rounded-2xl border border-border bg-card hover:shadow-xl transition-shadow group">
+                <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${fmt.color} flex items-center justify-center mb-6 group-hover:scale-110 transition-transform`}>
+                  <fmt.icon className="w-7 h-7 text-primary" />
+                </div>
+                <h3 className="text-2xl font-bold text-primary mb-2">{fmt.title}</h3>
+                <p className="text-sm text-accent font-semibold mb-3">{fmt.level}</p>
+                <p className="text-muted-foreground leading-relaxed">{fmt.desc}</p>
+              </SpotlightCard>
+            </motion.div>
+          ))}
+        </motion.div>
+      </Section>
+
+      {/* ===================== UPCOMING TOURNAMENTS ===================== */}
+      <Section id="tournaments" className="py-24" bg="bg-muted/40">
+        <div className="text-center mb-16">
+          <motion.span variants={fadeInUp} custom={0} className="text-accent font-bold tracking-wider uppercase text-sm">
+            On The Circuit
+          </motion.span>
+          <motion.h2 variants={fadeInUp} custom={0.1} className="text-3xl md:text-5xl font-display font-bold text-primary mt-2 mb-4">
+            Upcoming Tournaments
+          </motion.h2>
+          <motion.p variants={fadeInUp} custom={0.15} className="text-muted-foreground max-w-2xl mx-auto">
+            Major competitions where our students are training to compete. Book prep now.
+          </motion.p>
+        </div>
+
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-50px" }}
+          className="grid md:grid-cols-3 gap-6"
+        >
+          {[
+            { name: "NSDA National Championship", date: "June 2025", loc: "Dallas, TX", tag: "Elite", icon: Trophy },
+            { name: "State Forensics Invitational", date: "October 2025", loc: "Statewide", tag: "Qualifying", icon: Award },
+            { name: "Holiday Classic Tournament", date: "December 2025", loc: "Virtual", tag: "Open", icon: CalendarDays },
+          ].map((t) => (
+            <motion.div key={t.name} variants={staggerChild}>
+              <SpotlightCard className="h-full p-6 rounded-2xl border border-border bg-card hover:shadow-xl transition-shadow group">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="px-3 py-1 rounded-full bg-accent/10 text-accent text-xs font-bold uppercase tracking-wider">
+                    {t.tag}
+                  </span>
+                  <t.icon className="w-5 h-5 text-muted-foreground" />
+                </div>
+                <h3 className="text-xl font-bold text-primary mb-2">{t.name}</h3>
+                <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <CalendarDays className="w-4 h-4" /> {t.date}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <MapPin className="w-4 h-4" /> {t.loc}
+                  </span>
+                </div>
+                <div className="mt-4 pt-4 border-t border-border">
+                  <button
+                    onClick={scrollToContact}
+                    className="text-sm font-semibold text-accent hover:text-accent/80 transition-colors flex items-center gap-1"
+                  >
+                    Book Prep <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </SpotlightCard>
             </motion.div>
           ))}
         </motion.div>
