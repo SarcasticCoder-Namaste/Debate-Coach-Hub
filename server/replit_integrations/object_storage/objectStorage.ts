@@ -1,5 +1,5 @@
 import { Storage, File } from "@google-cloud/storage";
-import { Response } from "express";
+import { Request, Response } from "express";
 import { randomUUID } from "crypto";
 import {
   ObjectAclPolicy,
@@ -126,6 +126,121 @@ export class ObjectStorageService {
       console.error("Error downloading file:", error);
       if (!res.headersSent) {
         res.status(500).json({ error: "Error downloading file" });
+      }
+    }
+  }
+
+  // Streams an object to the response with HTTP Range support so clients can
+  // seek into long recordings without re-downloading the whole file.
+  async streamObject(
+    file: File,
+    req: Request,
+    res: Response,
+    cacheTtlSec: number = 3600,
+  ) {
+    try {
+      const [metadata] = await file.getMetadata();
+      const totalSize = Number(metadata.size ?? 0);
+      const aclPolicy = await getObjectAclPolicy(file);
+      const isPublic = aclPolicy?.visibility === "public";
+      const contentType = metadata.contentType || "application/octet-stream";
+      const cacheControl = `${isPublic ? "public" : "private"}, max-age=${cacheTtlSec}`;
+
+      res.setHeader("Accept-Ranges", "bytes");
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", cacheControl);
+
+      const rangeHeader = req.headers.range;
+      if (rangeHeader && totalSize > 0) {
+        const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim());
+        if (!match) {
+          res.setHeader("Content-Range", `bytes */${totalSize}`);
+          res.status(416).end();
+          return;
+        }
+        const startStr = match[1];
+        const endStr = match[2];
+        let start: number;
+        let end: number;
+        if (startStr === "" && endStr === "") {
+          res.setHeader("Content-Range", `bytes */${totalSize}`);
+          res.status(416).end();
+          return;
+        } else if (startStr === "") {
+          // Suffix range: last N bytes
+          const suffix = Number(endStr);
+          if (!Number.isFinite(suffix) || suffix <= 0) {
+            res.setHeader("Content-Range", `bytes */${totalSize}`);
+            res.status(416).end();
+            return;
+          }
+          start = Math.max(0, totalSize - suffix);
+          end = totalSize - 1;
+        } else {
+          start = Number(startStr);
+          end = endStr === "" ? totalSize - 1 : Number(endStr);
+        }
+        if (
+          !Number.isFinite(start) ||
+          !Number.isFinite(end) ||
+          start < 0 ||
+          end < start ||
+          start >= totalSize
+        ) {
+          res.setHeader("Content-Range", `bytes */${totalSize}`);
+          res.status(416).end();
+          return;
+        }
+        if (end >= totalSize) end = totalSize - 1;
+
+        const chunkSize = end - start + 1;
+        res.status(206);
+        res.setHeader("Content-Range", `bytes ${start}-${end}/${totalSize}`);
+        res.setHeader("Content-Length", String(chunkSize));
+
+        if (req.method === "HEAD") {
+          res.end();
+          return;
+        }
+
+        const stream = file.createReadStream({ start, end });
+        stream.on("error", (err) => {
+          console.error("Stream error:", err);
+          if (!res.headersSent) {
+            res.status(500).json({ error: "Error streaming file" });
+          } else {
+            res.destroy(err);
+          }
+        });
+        res.on("close", () => stream.destroy());
+        stream.pipe(res);
+        return;
+      }
+
+      // No Range header — full body.
+      if (totalSize > 0) {
+        res.setHeader("Content-Length", String(totalSize));
+      }
+      res.status(200);
+      if (req.method === "HEAD") {
+        res.end();
+        return;
+      }
+      const stream = file.createReadStream();
+      stream.on("error", (err) => {
+        console.error("Stream error:", err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: "Error streaming file" });
+        } else {
+          res.destroy(err);
+        }
+      });
+      res.on("close", () => stream.destroy());
+      stream.pipe(res);
+    } catch (error) {
+      console.error("Error streaming file:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Error streaming file" });
       }
     }
   }

@@ -849,8 +849,9 @@ export function registerPracticeRoutes(app: Express) {
     });
   });
 
-  // Stream the recorded video/audio for a share.
-  app.get("/api/practice/shares/:id/video", async (req: Request, res: Response) => {
+  // Stream the recorded video/audio for a share. Supports HTTP Range so
+  // players can seek into long clips without re-downloading the whole file.
+  const serveShareVideo = async (req: Request, res: Response) => {
     const id = String(req.params.id ?? "");
     if (!/^[A-Za-z0-9_-]{6,16}$/.test(id)) {
       return res.status(400).json({ error: "Invalid id" });
@@ -862,7 +863,7 @@ export function registerPracticeRoutes(app: Express) {
     }
     try {
       const file = await objSvc.getObjectEntityFile(row.objectPath);
-      await objSvc.downloadObject(file, res, 60 * 60);
+      await objSvc.streamObject(file, req, res, 60 * 60);
     } catch (err) {
       if (err instanceof ObjectNotFoundError) {
         return res.status(404).json({ error: "File missing" });
@@ -870,5 +871,7 @@ export function registerPracticeRoutes(app: Express) {
       console.error("share video error", err);
       if (!res.headersSent) res.status(500).json({ error: "Could not stream video" });
     }
-  });
+  };
+  app.get("/api/practice/shares/:id/video", serveShareVideo);
+  app.head("/api/practice/shares/:id/video", serveShareVideo);
 }
