@@ -8,6 +8,7 @@ import type {
 import { openai, ensureCompatibleFormat, speechToText } from "./replit_integrations/audio/client";
 import { ObjectStorageService, ObjectNotFoundError } from "./replit_integrations/object_storage";
 import { storage } from "./storage";
+import { sendCommentNotification } from "./notify";
 import {
   feedbackPayloadSchema,
   insertPracticeShareSchema,
@@ -504,10 +505,69 @@ const initShareSchema = z.object({
   size: z.number().int().positive().max(MAX_VIDEO_BYTES),
 });
 
-const finalizeShareSchema = insertPracticeShareSchema.extend({
-  feedback: feedbackReportSchema.nullable().optional(),
-  uploadToken: z.string().min(10),
-});
+const finalizeShareSchema = insertPracticeShareSchema
+  .omit({ userId: true })
+  .extend({
+    feedback: feedbackReportSchema.nullable().optional(),
+    uploadToken: z.string().min(10),
+  });
+
+/* ------------ comment notification debounce / throttle ------------ */
+// We batch a flurry of coach comments into a single email per share.
+// Strategy:
+//   - First comment on an idle share schedules a "send" timer for
+//     COMMENT_NOTIFY_DELAY_MS in the future, so a quick burst becomes one email.
+//   - While a timer is pending, additional comments are absorbed silently.
+//   - When the timer fires we look up every comment created since the share's
+//     `lastCommentNotifiedAt` and send one summary email (respecting opt-out).
+// Even if the same share keeps getting commented on, we never send more than
+// one email per COMMENT_NOTIFY_MIN_INTERVAL_MS.
+const COMMENT_NOTIFY_DELAY_MS = 2 * 60 * 1000;        // 2 min debounce window
+const COMMENT_NOTIFY_MIN_INTERVAL_MS = 10 * 60 * 1000; // ≥10 min between emails
+const pendingCommentTimers = new Map<string, NodeJS.Timeout>();
+
+async function flushCommentNotification(shareId: string) {
+  pendingCommentTimers.delete(shareId);
+  try {
+    const share = await storage.getPracticeShare(shareId);
+    if (!share || !share.userId) return;
+    const lastSent = share.lastCommentNotifiedAt ?? null;
+    const now = Date.now();
+    if (lastSent && now - lastSent.getTime() < COMMENT_NOTIFY_MIN_INTERVAL_MS) {
+      // Re-arm so the next batch goes out after the cool-down expires.
+      const wait =
+        COMMENT_NOTIFY_MIN_INTERVAL_MS - (now - lastSent.getTime()) + 1000;
+      const t = setTimeout(() => void flushCommentNotification(shareId), wait);
+      pendingCommentTimers.set(shareId, t);
+      return;
+    }
+    const newComments = await storage.listPracticeShareCommentsSince(
+      shareId,
+      lastSent,
+    );
+    if (newComments.length === 0) return;
+    const user = await storage.getUserById(share.userId);
+    if (!user) return;
+    if (!user.emailCommentNotifications) {
+      // User opted out — still mark as notified so we don't replay later.
+      await storage.setPracticeShareNotifiedAt(shareId, new Date());
+      return;
+    }
+    await sendCommentNotification(user, share, newComments);
+    await storage.setPracticeShareNotifiedAt(shareId, new Date());
+  } catch (err) {
+    console.error("flushCommentNotification error", err);
+  }
+}
+
+function scheduleCommentNotification(shareId: string) {
+  if (pendingCommentTimers.has(shareId)) return;
+  const t = setTimeout(
+    () => void flushCommentNotification(shareId),
+    COMMENT_NOTIFY_DELAY_MS,
+  );
+  pendingCommentTimers.set(shareId, t);
+}
 
 /* ------------------ coach referral email ------------------ */
 
@@ -1130,13 +1190,15 @@ export function registerPracticeRoutes(app: Express) {
     const id = makeSlug();
     // Signed-in users get clips that don't auto-expire; anonymous uploads
     // are kept for 30 days then cleaned up by the lazy sweep.
-    const isSignedIn = !!req.session?.userId;
+    const userId = req.session?.userId ?? null;
+    const isSignedIn = !!userId;
     const expiresAt = isSignedIn
       ? null
       : new Date(Date.now() + SHARE_TTL_DAYS * 24 * 60 * 60 * 1000);
     try {
       const row = await storage.createPracticeShare({
         id,
+        userId,
         objectPath,
         mimeType: baseType,
         sizeBytes: realSize,
@@ -1229,6 +1291,7 @@ export function registerPracticeRoutes(app: Express) {
     }
     try {
       const created = await storage.createPracticeShareComment(parsed.data);
+      scheduleCommentNotification(row.id);
       res.status(201).json(created);
     } catch (err) {
       console.error("share comment create error", err);

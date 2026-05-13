@@ -23,8 +23,14 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   name: text("name"),
   passwordHash: text("password_hash").notNull(),
+  emailCommentNotifications: boolean("email_comment_notifications").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+export const userPreferencesSchema = z.object({
+  emailCommentNotifications: z.boolean().optional(),
+});
+export type UserPreferences = z.infer<typeof userPreferencesSchema>;
 
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -237,6 +243,7 @@ export type InsertJudgeSession = z.infer<typeof insertJudgeSessionSchema>;
 
 export const practiceShares = pgTable("practice_shares", {
   id: text("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
   objectPath: text("object_path").notNull(),
   mimeType: text("mime_type").notNull(),
   sizeBytes: integer("size_bytes").notNull(),
@@ -247,12 +254,13 @@ export const practiceShares = pgTable("practice_shares", {
   feedback: jsonb("feedback").$type<FeedbackReport | null>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   expiresAt: timestamp("expires_at"),
+  lastCommentNotifiedAt: timestamp("last_comment_notified_at"),
 });
 
 export const insertPracticeShareSchema = createInsertSchema(practiceShares, {
   transcript: z.array(practiceTurnSchema).min(1),
   feedback: feedbackReportSchema.nullable().optional(),
-}).omit({ createdAt: true });
+}).omit({ createdAt: true, lastCommentNotifiedAt: true });
 
 export type PracticeShare = typeof practiceShares.$inferSelect;
 export type InsertPracticeShare = z.infer<typeof insertPracticeShareSchema>;

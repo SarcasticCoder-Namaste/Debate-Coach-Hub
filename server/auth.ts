@@ -4,7 +4,7 @@ import connectPgSimple from "connect-pg-simple";
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { pool } from "./db";
 import { storage } from "./storage";
-import { signinSchema, signupSchema, type User } from "@shared/schema";
+import { signinSchema, signupSchema, userPreferencesSchema, type User } from "@shared/schema";
 
 declare module "express-session" {
   interface SessionData {
@@ -28,7 +28,12 @@ function verifyPassword(password: string, stored: string): boolean {
 }
 
 function publicUser(u: User) {
-  return { id: u.id, email: u.email, name: u.name };
+  return {
+    id: u.id,
+    email: u.email,
+    name: u.name,
+    emailCommentNotifications: u.emailCommentNotifications,
+  };
 }
 
 export function setupSession(app: Express) {
@@ -125,5 +130,26 @@ export function registerAuthRoutes(app: Express) {
       return res.json({ user: null });
     }
     res.json({ user: publicUser(user) });
+  });
+
+  app.patch("/api/auth/preferences", async (req, res) => {
+    if (!req.session.userId) {
+      return res.status(401).json({ error: "Sign in required" });
+    }
+    const parsed = userPreferencesSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid preferences" });
+    }
+    try {
+      const updated = await storage.updateUserPreferences(
+        req.session.userId,
+        parsed.data,
+      );
+      if (!updated) return res.status(404).json({ error: "User not found" });
+      res.json({ user: publicUser(updated) });
+    } catch (err) {
+      console.error("preferences update error", err);
+      res.status(500).json({ error: "Could not update preferences" });
+    }
   });
 }

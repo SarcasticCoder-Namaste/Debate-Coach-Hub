@@ -40,7 +40,7 @@ import {
   type JudgeSession,
 } from "@shared/schema";
 import { db } from "./db";
-import { and, asc, desc, eq, isNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, lt } from "drizzle-orm";
 
 export interface IStorage {
   createInquiry(inquiry: InsertInquiry): Promise<Inquiry>;
@@ -99,6 +99,9 @@ export interface IStorage {
 
   createPracticeShareComment(c: InsertPracticeShareComment): Promise<PracticeShareComment>;
   listPracticeShareComments(shareId: string): Promise<PracticeShareComment[]>;
+  listPracticeShareCommentsSince(shareId: string, since: Date | null): Promise<PracticeShareComment[]>;
+  setPracticeShareNotifiedAt(shareId: string, when: Date): Promise<void>;
+  updateUserPreferences(userId: number, prefs: { emailCommentNotifications?: boolean }): Promise<User | undefined>;
 
   listSavedTopics(userId: string): Promise<SavedTopic[]>;
   addSavedTopic(input: InsertSavedTopic): Promise<SavedTopic>;
@@ -440,6 +443,43 @@ export class DatabaseStorage implements IStorage {
       .from(practiceShareComments)
       .where(eq(practiceShareComments.shareId, shareId))
       .orderBy(asc(practiceShareComments.timestampSec), asc(practiceShareComments.createdAt));
+  }
+
+  async listPracticeShareCommentsSince(
+    shareId: string,
+    since: Date | null,
+  ): Promise<PracticeShareComment[]> {
+    const where = since
+      ? and(
+          eq(practiceShareComments.shareId, shareId),
+          gt(practiceShareComments.createdAt, since),
+        )
+      : eq(practiceShareComments.shareId, shareId);
+    return db
+      .select()
+      .from(practiceShareComments)
+      .where(where)
+      .orderBy(asc(practiceShareComments.createdAt));
+  }
+
+  async setPracticeShareNotifiedAt(shareId: string, when: Date): Promise<void> {
+    await db
+      .update(practiceShares)
+      .set({ lastCommentNotifiedAt: when })
+      .where(eq(practiceShares.id, shareId));
+  }
+
+  async updateUserPreferences(
+    userId: number,
+    prefs: { emailCommentNotifications?: boolean },
+  ): Promise<User | undefined> {
+    if (Object.keys(prefs).length === 0) return this.getUserById(userId);
+    const [row] = await db
+      .update(users)
+      .set(prefs)
+      .where(eq(users.id, userId))
+      .returning();
+    return row;
   }
 
   async listSavedTopics(userId: string): Promise<SavedTopic[]> {
