@@ -47,6 +47,7 @@ export function ContactForm() {
                 <FormLabel className="text-foreground font-semibold">Full Name</FormLabel>
                 <FormControl>
                   <Input 
+                    data-testid="input-name"
                     placeholder="John Doe" 
                     className="h-12 px-4 bg-muted/30 border-border/60 focus:bg-white focus:border-primary focus:ring-primary/10 transition-all rounded-lg"
                     {...field} 
@@ -65,6 +66,7 @@ export function ContactForm() {
                 <FormLabel className="text-foreground font-semibold">Email Address</FormLabel>
                 <FormControl>
                   <Input 
+                    data-testid="input-email"
                     placeholder="john@example.com" 
                     className="h-12 px-4 bg-muted/30 border-border/60 focus:bg-white focus:border-primary focus:ring-primary/10 transition-all rounded-lg"
                     {...field} 
@@ -83,6 +85,7 @@ export function ContactForm() {
                 <FormLabel className="text-foreground font-semibold">How can I help you?</FormLabel>
                 <FormControl>
                   <Textarea 
+                    data-testid="input-message"
                     placeholder="Tell me about your debate experience and goals..." 
                     className="min-h-[120px] p-4 bg-muted/30 border-border/60 focus:bg-white focus:border-primary focus:ring-primary/10 transition-all rounded-lg resize-y"
                     {...field} 
@@ -94,6 +97,7 @@ export function ContactForm() {
           />
 
           <Button 
+            data-testid="button-submit-contact"
             type="submit" 
             disabled={isPending}
             className="w-full h-12 text-lg font-semibold bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/25 rounded-lg transition-all hover:-translate-y-0.5"

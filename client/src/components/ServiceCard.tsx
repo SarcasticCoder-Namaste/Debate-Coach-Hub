@@ -59,6 +59,7 @@ export function ServiceCard({
       
       <CardFooter>
         <Button 
+          data-testid={`button-book-${title.toLowerCase().replace(/\s+/g, "-")}`}
           onClick={onBook} 
           className={`w-full py-6 font-semibold transition-all ${
             recommended 

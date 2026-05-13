@@ -11,7 +11,15 @@ import {
   CheckCircle2, 
   Calendar,
   ArrowRight,
-  GraduationCap
+  GraduationCap,
+  BarChart3,
+  BookOpen,
+  FileText,
+  MessageSquare,
+  Award,
+  Star,
+  ShieldCheck,
+  Clock3
 } from "lucide-react";
 
 export default function Home() {
@@ -246,6 +254,23 @@ export default function Home() {
         </div>
       </section>
 
+      <section id="stats" className="py-20 bg-white">
+        <div className="container mx-auto px-4 grid md:grid-cols-4 gap-6 text-center">
+          {[
+            { icon: Award, value: "150+", label: "Students Coached" },
+            { icon: Star, value: "4.9/5", label: "Average Rating" },
+            { icon: ShieldCheck, value: "90%", label: "Break Rate" },
+            { icon: Clock3, value: "10+", label: "Years Experience" },
+          ].map((stat) => (
+            <div key={stat.label} className="p-6 rounded-2xl border border-border bg-muted/20">
+              <stat.icon className="w-8 h-8 text-accent mx-auto mb-3" />
+              <div className="text-3xl font-bold font-display text-primary">{stat.value}</div>
+              <div className="text-sm text-muted-foreground">{stat.label}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* TESTIMONIALS SECTION */}
       <section id="testimonials" className="py-24 bg-primary text-white overflow-hidden relative">
         <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
@@ -301,7 +326,50 @@ export default function Home() {
         </div>
       </section>
 
-      {/* CONTACT SECTION */}
+      <section id="resources" className="py-24 bg-white">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-16">
+            <span className="text-accent font-bold tracking-wider uppercase text-sm">Resources</span>
+            <h2 className="text-3xl md:text-5xl font-display font-bold text-primary mt-2 mb-4">Tools to Level Up Faster</h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">Free guides and templates to help students prepare between sessions.</p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-6">
+            {[
+              { icon: BookOpen, title: "Beginner Debate Guide", desc: "Learn core structure, flow, and prep habits." },
+              { icon: FileText, title: "Case Building Template", desc: "Organize evidence and arguments efficiently." },
+              { icon: MessageSquare, title: "Practice Round Checklist", desc: "Arrive prepared with a pre-round routine." },
+            ].map((resource) => (
+              <div key={resource.title} className="p-6 rounded-2xl border border-border bg-muted/20 hover:shadow-lg transition-shadow">
+                <resource.icon className="w-8 h-8 text-primary mb-4" />
+                <h3 className="text-xl font-bold text-primary mb-2">{resource.title}</h3>
+                <p className="text-muted-foreground">{resource.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="faq" className="py-24 bg-muted/50">
+        <div className="container mx-auto px-4">
+          <div className="max-w-3xl mx-auto text-center mb-10">
+            <h2 className="text-3xl md:text-5xl font-display font-bold text-primary mb-4">Frequently Asked Questions</h2>
+            <p className="text-muted-foreground">Quick answers about sessions, scheduling, and coaching style.</p>
+          </div>
+          <div className="max-w-3xl mx-auto grid gap-4">
+            {[
+              ["Who do you coach?", "Middle school, high school, and college debaters."],
+              ["Do you offer virtual sessions?", "Yes, Zoom coaching is available worldwide."],
+              ["How do I get started?", "Book a free consultation and we'll map out next steps."],
+            ].map(([q, a]) => (
+              <div key={q} className="p-6 rounded-2xl bg-white border border-border">
+                <h3 className="font-bold text-primary mb-2">{q}</h3>
+                <p className="text-muted-foreground">{a}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <section id="contact" className="py-24 bg-muted/50">
         <div className="container mx-auto px-4">
           <div className="grid lg:grid-cols-2 gap-16 items-start">

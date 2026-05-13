@@ -59,6 +59,7 @@ export function Navigation() {
             </button>
           ))}
           <Button
+            data-testid="button-free-consultation"
             onClick={() => scrollToSection("contact")}
             className={
               isScrolled 
@@ -72,6 +73,7 @@ export function Navigation() {
 
         {/* Mobile Menu Toggle */}
         <button
+          data-testid="button-mobile-menu"
           className="md:hidden p-2 text-foreground"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
         >
@@ -84,6 +86,7 @@ export function Navigation() {
         <div className="md:hidden absolute top-full left-0 right-0 bg-white border-b border-border shadow-xl p-4 flex flex-col gap-4 animate-in slide-in-from-top-5">
           {["Home", "About", "Services", "Testimonials", "Contact"].map((item) => (
             <button
+              data-testid={`button-nav-${item.toLowerCase()}`}
               key={item}
               onClick={() => scrollToSection(item.toLowerCase())}
               className="text-left text-lg font-medium text-foreground py-2 border-b border-border/50 last:border-0"
@@ -92,6 +95,7 @@ export function Navigation() {
             </button>
           ))}
           <Button 
+            data-testid="button-book-session"
             className="w-full mt-2 bg-primary text-white shadow-lg shadow-primary/25"
             onClick={() => scrollToSection("contact")}
           >
