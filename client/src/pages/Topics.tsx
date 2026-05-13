@@ -5,6 +5,9 @@ import { Navigation } from "@/components/Navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { BookmarkButton } from "@/components/BookmarkButton";
+import { useSavedTopics } from "@/hooks/use-saved-topics";
+import { Bookmark } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -50,14 +53,18 @@ export default function Topics() {
   const [difficultyFilter, setDifficultyFilter] =
     useState<TopicDifficulty | "all">("all");
   const [search, setSearch] = useState("");
+  const [savedOnly, setSavedOnly] = useState(false);
 
   const { data: topics = [], isLoading } = useQuery<DebateTopic[]>({
     queryKey: ["/api/topics"],
   });
 
+  const { savedIds } = useSavedTopics();
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return topics.filter((t) => {
+      if (savedOnly && !savedIds.has(t.id)) return false;
       if (formatFilter !== "all" && t.format !== formatFilter) return false;
       if (difficultyFilter !== "all" && t.difficulty !== difficultyFilter)
         return false;
@@ -69,7 +76,7 @@ export default function Topics() {
         return false;
       return true;
     });
-  }, [topics, formatFilter, difficultyFilter, search]);
+  }, [topics, formatFilter, difficultyFilter, search, savedOnly, savedIds]);
 
   const grouped = useMemo(() => {
     const map = new Map<TopicFormat, DebateTopic[]>();
@@ -166,10 +173,29 @@ export default function Topics() {
               </Select>
             </div>
           </div>
-          <div className="mt-3 text-xs text-muted-foreground" data-testid="text-results-count">
-            {isLoading
-              ? "Loading topics…"
-              : `${filtered.length} topic${filtered.length === 1 ? "" : "s"} match your filters`}
+          <div className="mt-3 flex items-center justify-between gap-4 flex-wrap">
+            <div className="text-xs text-muted-foreground" data-testid="text-results-count">
+              {isLoading
+                ? "Loading topics…"
+                : `${filtered.length} topic${filtered.length === 1 ? "" : "s"} match your filters`}
+            </div>
+            <button
+              type="button"
+              onClick={() => setSavedOnly((v) => !v)}
+              data-testid="button-toggle-saved-only"
+              aria-pressed={savedOnly}
+              className={`inline-flex items-center gap-1.5 text-xs font-semibold rounded-full px-3 py-1.5 border transition-colors ${
+                savedOnly
+                  ? "bg-accent text-accent-foreground border-accent"
+                  : "bg-background border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Bookmark className="w-3.5 h-3.5" />
+              {savedOnly ? "Showing Saved" : "Saved only"}
+              <span className="ml-1 rounded-full bg-foreground/10 px-1.5 py-0.5 text-[10px]" data-testid="text-saved-count">
+                {savedIds.size}
+              </span>
+            </button>
           </div>
         </Card>
 
@@ -205,8 +231,9 @@ export default function Topics() {
           {!isLoading && filtered.length === 0 && (
             <Card className="p-10 text-center" data-testid="empty-state">
               <p className="text-muted-foreground">
-                No topics match those filters. Try clearing the search or
-                widening difficulty.
+                {savedOnly && savedIds.size === 0
+                  ? "You haven't saved any topics yet. Tap the bookmark icon on any card to add it here."
+                  : "No topics match those filters. Try clearing the search or widening difficulty."}
               </p>
             </Card>
           )}
@@ -237,6 +264,9 @@ function TopicCard({ topic }: { topic: DebateTopic }) {
           <GraduationCap className="w-3 h-3 mr-1" />
           {topic.difficulty}
         </Badge>
+        <div className="ml-auto">
+          <BookmarkButton topicId={topic.id} />
+        </div>
       </div>
 
       <h3

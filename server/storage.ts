@@ -9,6 +9,7 @@ import {
   practiceRounds,
   coaches,
   leads,
+  savedTopics,
   type InsertInquiry,
   type Inquiry,
   type InsertPracticeShare,
@@ -29,6 +30,8 @@ import {
   type Lead,
   type InsertLead,
   type UpdateLead,
+  type InsertSavedTopic,
+  type SavedTopic,
 } from "@shared/schema";
 import { db } from "./db";
 import { and, asc, desc, eq, isNull, lt } from "drizzle-orm";
@@ -89,6 +92,10 @@ export interface IStorage {
 
   createPracticeShareComment(c: InsertPracticeShareComment): Promise<PracticeShareComment>;
   listPracticeShareComments(shareId: string): Promise<PracticeShareComment[]>;
+
+  listSavedTopics(userId: string): Promise<SavedTopic[]>;
+  addSavedTopic(input: InsertSavedTopic): Promise<SavedTopic>;
+  removeSavedTopic(userId: string, topicId: string): Promise<void>;
 }
 
 function nextPeriodEnd(from: Date, interval: string): Date {
@@ -421,6 +428,37 @@ export class DatabaseStorage implements IStorage {
       .from(practiceShareComments)
       .where(eq(practiceShareComments.shareId, shareId))
       .orderBy(asc(practiceShareComments.timestampSec), asc(practiceShareComments.createdAt));
+  }
+
+  async listSavedTopics(userId: string): Promise<SavedTopic[]> {
+    return db
+      .select()
+      .from(savedTopics)
+      .where(eq(savedTopics.userId, userId))
+      .orderBy(desc(savedTopics.createdAt));
+  }
+
+  async addSavedTopic(input: InsertSavedTopic): Promise<SavedTopic> {
+    const [row] = await db
+      .insert(savedTopics)
+      .values(input)
+      .onConflictDoUpdate({
+        target: [savedTopics.userId, savedTopics.topicId],
+        set: { createdAt: new Date() },
+      })
+      .returning();
+    return row;
+  }
+
+  async removeSavedTopic(userId: string, topicId: string): Promise<void> {
+    await db
+      .delete(savedTopics)
+      .where(
+        and(
+          eq(savedTopics.userId, userId),
+          eq(savedTopics.topicId, topicId),
+        ),
+      );
   }
 }
 

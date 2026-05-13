@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { type DebateTopic, FORMAT_LABELS, TOPICS } from "@shared/topics";
+import { useSavedTopics } from "@/hooks/use-saved-topics";
 import { motion, AnimatePresence } from "framer-motion";
 import { Navigation } from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
@@ -244,6 +245,28 @@ export default function PracticeBot() {
     libraryTopics.forEach((t) => map.set(t.id, t));
     return map;
   }, [libraryTopics]);
+
+  const { saved: savedTopicRows } = useSavedTopics();
+
+  // Recently-saved library topics, in save order (newest first), filtered to
+  // ones still in the library.
+  const savedTopicSuggestions = useMemo(() => {
+    const out: DebateTopic[] = [];
+    const seen = new Set<string>();
+    for (const row of savedTopicRows) {
+      const t = libraryById.get(row.topicId);
+      if (t && !seen.has(t.id)) {
+        out.push(t);
+        seen.add(t.id);
+      }
+    }
+    return out;
+  }, [savedTopicRows, libraryById]);
+
+  const otherLibraryTopics = useMemo(() => {
+    const savedSet = new Set(savedTopicSuggestions.map((t) => t.id));
+    return libraryTopics.filter((t) => !savedSet.has(t.id));
+  }, [libraryTopics, savedTopicSuggestions]);
 
   // When a topicId is supplied via URL (or selected from the picker),
   // pre-load its resolution and format.
@@ -1193,9 +1216,32 @@ export default function PracticeBot() {
                 >
                   <SelectTrigger data-testid="select-topic"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {language === "en" && libraryTopics.length > 0 && (
+                    {savedTopicSuggestions.length > 0 && (
+                      <div data-testid="select-saved-group">
+                        <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+                          ★ Recently saved
+                        </div>
+                        {savedTopicSuggestions.map((t) => (
+                          <SelectItem
+                            key={`saved-${t.id}`}
+                            value={t.id}
+                            className="text-sm"
+                            data-testid={`select-saved-${t.id}`}
+                          >
+                            [{FORMAT_LABELS[t.format]}] {t.resolution}
+                          </SelectItem>
+                        ))}
+                        <div className="my-1 h-px bg-border" />
+                      </div>
+                    )}
+                    {language === "en" && otherLibraryTopics.length > 0 && (
                       <>
-                        {libraryTopics.map((t) => (
+                        {savedTopicSuggestions.length > 0 && (
+                          <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            Library
+                          </div>
+                        )}
+                        {otherLibraryTopics.map((t) => (
                           <SelectItem key={t.id} value={t.id} className="text-sm">
                             [{FORMAT_LABELS[t.format]}] {t.resolution}
                           </SelectItem>

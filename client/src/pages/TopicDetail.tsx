@@ -21,6 +21,7 @@ import {
   type TopicDifficulty,
   FORMAT_LABELS,
 } from "@shared/topics";
+import { BookmarkButton } from "@/components/BookmarkButton";
 
 const DIFFICULTY_BADGE: Record<TopicDifficulty, string> = {
   Beginner: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
@@ -89,6 +90,7 @@ export default function TopicDetail() {
                 <span className="inline-flex items-center gap-1.5 text-xs text-white/70">
                   <Clock className="w-3 h-3" /> {topic.suggestedTime}
                 </span>
+                <BookmarkButton topicId={topic.id} variant="hero" className="ml-auto" />
               </div>
               <h1
                 className="text-2xl md:text-4xl font-display font-bold text-white leading-tight"

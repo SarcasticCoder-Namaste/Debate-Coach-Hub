@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, jsonb, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, jsonb, boolean, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -533,3 +533,27 @@ export const insertPracticeSessionSchema = createInsertSchema(practiceSessions, 
 
 export type PracticeSession = typeof practiceSessions.$inferSelect;
 export type InsertPracticeSession = z.infer<typeof insertPracticeSessionSchema>;
+
+export const savedTopics = pgTable(
+  "saved_topics",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    topicId: text("topic_id").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    userTopicUnique: uniqueIndex("saved_topics_user_topic_unique").on(
+      t.userId,
+      t.topicId,
+    ),
+  }),
+);
+
+export const insertSavedTopicSchema = createInsertSchema(savedTopics).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type SavedTopic = typeof savedTopics.$inferSelect;
+export type InsertSavedTopic = z.infer<typeof insertSavedTopicSchema>;

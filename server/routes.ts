@@ -185,6 +185,70 @@ export async function registerRoutes(
     res.json(updated);
   });
 
+  function requireUserId(req: Request, res: Response): string | null {
+    const raw = req.header("x-user-id");
+    const userId = typeof raw === "string" ? raw.trim() : "";
+    if (!userId || userId.length > 128) {
+      res.status(400).json({ message: "Missing or invalid x-user-id header" });
+      return null;
+    }
+    return userId;
+  }
+
+  app.get("/api/saved-topics", async (req, res) => {
+    const userId = requireUserId(req, res);
+    if (!userId) return;
+    try {
+      const rows = await storage.listSavedTopics(userId);
+      res.json(rows);
+    } catch (err) {
+      console.error("listSavedTopics failed", err);
+      res.status(500).json({ message: "Failed to load saved topics" });
+    }
+  });
+
+  const savedTopicBodySchema = z.object({
+    topicId: z.string().min(1).max(128),
+  });
+
+  app.post("/api/saved-topics", async (req, res) => {
+    const userId = requireUserId(req, res);
+    if (!userId) return;
+    const parsed = savedTopicBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid topicId" });
+    }
+    if (!getTopicById(parsed.data.topicId)) {
+      return res.status(404).json({ message: "Unknown topic" });
+    }
+    try {
+      const row = await storage.addSavedTopic({
+        userId,
+        topicId: parsed.data.topicId,
+      });
+      res.status(201).json(row);
+    } catch (err) {
+      console.error("addSavedTopic failed", err);
+      res.status(500).json({ message: "Failed to save topic" });
+    }
+  });
+
+  app.delete("/api/saved-topics/:topicId", async (req, res) => {
+    const userId = requireUserId(req, res);
+    if (!userId) return;
+    const topicId = req.params.topicId;
+    if (!topicId || topicId.length > 128) {
+      return res.status(400).json({ message: "Invalid topicId" });
+    }
+    try {
+      await storage.removeSavedTopic(userId, topicId);
+      res.status(204).end();
+    } catch (err) {
+      console.error("removeSavedTopic failed", err);
+      res.status(500).json({ message: "Failed to remove saved topic" });
+    }
+  });
+
   registerPracticeRoutes(app);
   registerSessionRoutes(app);
   registerBillingRoutes(app);
