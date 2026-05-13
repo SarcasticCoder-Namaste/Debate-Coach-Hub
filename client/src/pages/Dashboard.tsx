@@ -1,11 +1,24 @@
+import { useState } from "react";
 import { Link, Redirect } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Navigation } from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { useAuth } from "@/hooks/use-auth";
 import {
-  ArrowLeft, Search, FileText, Loader2, ArrowRight, Mic, BookOpen, Sparkles,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useAuth } from "@/hooks/use-auth";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import {
+  ArrowLeft, Search, FileText, Loader2, ArrowRight, Mic, BookOpen, Sparkles, Trash2,
 } from "lucide-react";
 
 interface SavedRow {
@@ -27,9 +40,29 @@ function formatDate(d: string) {
 
 export default function Dashboard() {
   const { user, isLoading: authLoading } = useAuth();
+  const { toast } = useToast();
+  const [pendingDelete, setPendingDelete] = useState<SavedRow | null>(null);
   const { data, isLoading, isError } = useQuery<SavedRow[]>({
     queryKey: ["/api/research"],
     enabled: !!user,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/research/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/research"] });
+      toast({ title: "Packet deleted" });
+      setPendingDelete(null);
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Couldn't delete packet",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
   });
 
   if (authLoading) {
@@ -136,32 +169,91 @@ export default function Dashboard() {
           {data && data.length > 0 && (
             <div className="grid gap-3">
               {data.map((r) => (
-                <Link key={r.id} href={`/research/${r.id}`} data-testid={`row-research-${r.id}`}>
-                  <Card className="p-5 hover-elevate active-elevate-2 cursor-pointer">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-display text-base font-bold text-foreground leading-snug truncate">
-                          {r.topic}
-                        </h3>
-                        <div className="flex flex-wrap gap-1.5 mt-2 text-[10px] uppercase tracking-wider font-bold">
-                          <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary">{r.format}</span>
-                          <span className="px-2 py-0.5 rounded-full bg-accent/10 text-accent">{r.side}</span>
-                          <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{r.depth}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-2">{formatDate(r.createdAt)}</p>
+                <Card key={r.id} className="p-5 hover-elevate" data-testid={`row-research-${r.id}`}>
+                  <div className="flex items-start justify-between gap-4">
+                    <Link
+                      href={`/research/${r.id}`}
+                      className="flex-1 min-w-0"
+                      data-testid={`link-research-${r.id}`}
+                    >
+                      <h3 className="font-display text-base font-bold text-foreground leading-snug truncate">
+                        {r.topic}
+                      </h3>
+                      <div className="flex flex-wrap gap-1.5 mt-2 text-[10px] uppercase tracking-wider font-bold">
+                        <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary">{r.format}</span>
+                        <span className="px-2 py-0.5 rounded-full bg-accent/10 text-accent">{r.side}</span>
+                        <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{r.depth}</span>
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0 mt-1">
-                        <FileText className="w-4 h-4 text-muted-foreground" />
+                      <p className="text-xs text-muted-foreground mt-2">{formatDate(r.createdAt)}</p>
+                    </Link>
+                    <div className="flex items-center gap-1 flex-shrink-0 mt-1">
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                      <Link href={`/research/${r.id}`} aria-label="Open packet">
                         <ArrowRight className="w-5 h-5 text-muted-foreground" />
-                      </div>
+                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setPendingDelete(r);
+                        }}
+                        data-testid={`button-delete-research-${r.id}`}
+                        aria-label="Delete packet"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
-                  </Card>
-                </Link>
+                  </div>
+                </Card>
               ))}
             </div>
           )}
         </div>
       </section>
+
+      <AlertDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => {
+          if (!open && !deleteMutation.isPending) setPendingDelete(null);
+        }}
+      >
+        <AlertDialogContent data-testid="dialog-confirm-delete">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this research packet?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete ? (
+                <>“{pendingDelete.topic}” will be permanently removed from your saved research. This can't be undone.</>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              disabled={deleteMutation.isPending}
+              data-testid="button-cancel-delete"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                if (pendingDelete) deleteMutation.mutate(pendingDelete.id);
+              }}
+              disabled={deleteMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete"
+            >
+              {deleteMutation.isPending ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Deleting…</>
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
