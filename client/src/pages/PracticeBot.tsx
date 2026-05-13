@@ -9,7 +9,7 @@ import {
   getSpeechOrder,
   type SpeechPhase,
 } from "@shared/schema";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Navigation } from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
@@ -26,12 +26,13 @@ import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import {
   Mic, MicOff, Video, VideoOff, Loader2, Sparkles, Download,
-  Volume2, VolumeX, RotateCcw, ArrowLeft, Send, AlertTriangle, Gavel, Languages,
+  Volume2, VolumeX, RotateCcw, ArrowLeft, Send, AlertTriangle, Gavel, Languages, LogIn,
   FileText, Upload, X, BookOpen,
   Share2, Copy, Check, CalendarDays, Trophy, BookmarkCheck, Mail,
   ChevronDown, ChevronUp, Clock, Lightbulb, Timer, Pause, Play,
   TrendingUp, ThumbsUp, AlertCircle, Gauge, MessageSquare, Layers, Target, Zap,
   ExternalLink, Quote, Award, ChevronRight, Users, Flag,
+  Library,
 } from "lucide-react";
 import { Paywall, useFeatureAccess } from "@/components/Paywall";
 import type { FeedbackReport, ResearchBundle } from "@shared/schema";
@@ -212,6 +213,8 @@ function getQueryParams(): URLSearchParams {
 export default function PracticeBot() {
   const { toast } = useToast();
   const { user } = useAuth();
+  const prefersReducedMotion = useReducedMotion();
+  const displayName = (user?.name?.trim() || user?.email?.split("@")[0] || "Debater").split(/\s+/)[0];
   const [savedRoundId, setSavedRoundId] = useState<number | null>(null);
   const [savingRound, setSavingRound] = useState(false);
 
@@ -1314,70 +1317,204 @@ export default function PracticeBot() {
       <Navigation />
       <audio ref={audioRef} hidden />
 
-      {/* Hero strip */}
-      <section className="relative pt-32 pb-10 px-4 overflow-hidden bg-primary">
+      {/* ===== Animated post-login hero ===== */}
+      <section className="relative pt-28 pb-12 px-4 overflow-hidden bg-gradient-to-br from-primary via-primary to-[hsl(var(--primary)/0.85)]">
+        {/* Animated gradient orbs */}
         <div className="absolute inset-0 pointer-events-none">
-          <div className="orb orb-delay-1 absolute -top-24 -right-24 w-[500px] h-[500px] bg-accent/20 rounded-full blur-[100px]" />
-          <div className="orb orb-delay-2 absolute -bottom-20 left-1/4 w-[400px] h-[400px] bg-white/[0.05] rounded-full blur-[90px]" />
+          <motion.div
+            className="absolute -top-32 -right-32 w-[600px] h-[600px] bg-accent/25 rounded-full blur-[110px]"
+            animate={prefersReducedMotion ? { opacity: 0.6 } : { scale: [1, 1.15, 1], opacity: [0.5, 0.75, 0.5] }}
+            transition={prefersReducedMotion ? { duration: 0 } : { duration: 8, repeat: Infinity, ease: "easeInOut" }}
+          />
+          <motion.div
+            className="absolute -bottom-24 left-1/4 w-[450px] h-[450px] bg-white/[0.06] rounded-full blur-[100px]"
+            animate={prefersReducedMotion ? { opacity: 0.5 } : { scale: [1, 1.1, 1], opacity: [0.4, 0.7, 0.4] }}
+            transition={prefersReducedMotion ? { duration: 0 } : { duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1.5 }}
+          />
+          <motion.div
+            className="absolute top-1/3 right-1/3 w-[300px] h-[300px] bg-accent/15 rounded-full blur-[90px]"
+            animate={prefersReducedMotion ? { opacity: 0.4 } : { scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
+            transition={prefersReducedMotion ? { duration: 0 } : { duration: 7, repeat: Infinity, ease: "easeInOut", delay: 0.8 }}
+          />
         </div>
+
         <div className="container relative z-10 mx-auto max-w-5xl">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-white/70 hover:text-white text-sm mb-4 transition-colors"
-            data-testid="link-back-home"
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
           >
-            <ArrowLeft className="w-4 h-4" /> Back to home
-          </Link>
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/20 text-white/90 text-xs font-medium mb-3">
-            <Sparkles className="w-3.5 h-3.5 text-accent" /> AI Practice Round
-          </div>
-          <h1 className="text-3xl md:text-5xl font-display font-bold text-white leading-tight">
-            Spar With An <span className="gradient-text">AI Opponent.</span>
-          </h1>
-          <p className="text-white/75 mt-3 max-w-2xl">
-            Pick a resolution, choose your side, and run a live round. Get spoken counter-arguments
-            and a structured feedback card after every speech.
-          </p>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-white/70 hover:text-white text-sm mb-5 transition-colors"
+              data-testid="link-back-home"
+            >
+              <ArrowLeft className="w-4 h-4" /> Home
+            </Link>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.92 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/20 text-white/90 text-xs font-medium mb-4 backdrop-blur-sm"
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-accent" />
+            </span>
+            <Sparkles className="w-3.5 h-3.5 text-accent" />
+            {user ? "Live AI Practice · Personalized for you" : "Live AI Practice Round"}
+          </motion.div>
+
+          <motion.h1
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.65, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+            className="text-3xl md:text-5xl lg:text-6xl font-display font-bold text-white leading-[1.05] tracking-tight"
+          >
+            {user ? (
+              <>
+                Welcome back,{" "}
+                <span className="gradient-text" data-testid="text-greeting-name">
+                  {displayName}.
+                </span>
+              </>
+            ) : (
+              <>Spar With An <span className="gradient-text">AI Opponent.</span></>
+            )}
+          </motion.h1>
+
+          <motion.p
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, delay: 0.2 }}
+            className="text-white/75 mt-4 max-w-2xl text-base md:text-lg leading-relaxed"
+          >
+            {user
+              ? "Pick up a resolution, jump into a live round, or sharpen a single skill in 60 seconds. Everything saves automatically."
+              : "Pick a resolution, choose your side, and run a live round. Get spoken counter-arguments and a structured feedback card after every speech."}
+          </motion.p>
+
+          {/* Quick-action tiles (signed-in only) */}
+          {user && (
+            <motion.div
+              initial="hidden"
+              animate="visible"
+              variants={{
+                hidden: {},
+                visible: { transition: { staggerChildren: 0.07, delayChildren: 0.35 } },
+              }}
+              className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-3"
+            >
+              {[
+                { href: "#round-setup", label: "Start a round", desc: "Pick a topic & spar", icon: Mic, accent: true, scroll: true },
+                { href: "/drills", label: "Quick drill", desc: "60-second skill rep", icon: Zap },
+                { href: "/topics", label: "Browse topics", desc: "Library of resolutions", icon: Library },
+                { href: "/history", label: "My practice", desc: "Recent rounds & scores", icon: Trophy },
+              ].map((t) => {
+                const Icon = t.icon;
+                const inner = (
+                  <motion.div
+                    variants={{
+                      hidden: { opacity: 0, y: 16 },
+                      visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } },
+                    }}
+                    whileHover={prefersReducedMotion ? undefined : { y: -4, transition: { duration: 0.2 } }}
+                    className={`group relative h-full p-4 rounded-xl border backdrop-blur-sm transition-colors cursor-pointer ${
+                      t.accent
+                        ? "bg-accent/15 border-accent/40 hover:bg-accent/25 hover:border-accent/60"
+                        : "bg-white/5 border-white/15 hover:bg-white/10 hover:border-white/30"
+                    }`}
+                  >
+                    <div className={`inline-flex items-center justify-center w-9 h-9 rounded-lg mb-3 ${
+                      t.accent ? "bg-accent text-white" : "bg-white/10 text-white"
+                    }`}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div className="text-sm font-bold text-white">{t.label}</div>
+                    <div className="text-xs text-white/65 mt-0.5">{t.desc}</div>
+                    <ChevronRight className={`absolute top-4 right-4 w-4 h-4 transition-transform group-hover:translate-x-0.5 ${
+                      t.accent ? "text-accent" : "text-white/50"
+                    }`} />
+                  </motion.div>
+                );
+                if (t.scroll) {
+                  return (
+                    <button
+                      key={t.label}
+                      type="button"
+                      data-testid={`tile-${t.label.toLowerCase().replace(/\s+/g, "-")}`}
+                      onClick={() => {
+                        document.getElementById("round-setup")?.scrollIntoView({
+                          behavior: prefersReducedMotion ? "auto" : "smooth",
+                          block: "start",
+                        });
+                      }}
+                      className="text-left rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-primary"
+                    >
+                      {inner}
+                    </button>
+                  );
+                }
+                return (
+                  <Link
+                    key={t.label}
+                    href={t.href}
+                    data-testid={`tile-${t.label.toLowerCase().replace(/\s+/g, "-")}`}
+                    className="rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-primary"
+                  >
+                    {inner}
+                  </Link>
+                );
+              })}
+            </motion.div>
+          )}
         </div>
       </section>
 
-      <section className="container mx-auto max-w-5xl px-4 pt-6">
-        {user ? (
-          <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-primary/5 border border-primary/15 text-sm" data-testid="banner-signed-in">
-            <span className="text-foreground/80">
-              Signed in as <span className="font-semibold text-primary">{user.name || user.email}</span>. Rounds save automatically when you get feedback.
-            </span>
-            <Link
-              href="/history"
-              className="inline-flex items-center gap-1.5 text-accent font-semibold hover:underline whitespace-nowrap"
-              data-testid="link-view-history"
-            >
-              <HistoryIcon className="w-3.5 h-3.5" /> View history
-            </Link>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-accent/5 border border-accent/20 text-sm" data-testid="banner-signin-cta">
+      {!user && (
+        <section className="container mx-auto max-w-5xl px-4 pt-6">
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.3 }}
+            className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl bg-gradient-to-r from-accent/10 via-accent/5 to-transparent border border-accent/25 text-sm"
+            data-testid="banner-signin-cta"
+          >
             <span className="text-foreground/80">
               <span className="font-semibold text-foreground">Want to save your progress?</span> Sign in to keep transcripts, feedback scores, and replays after every round.
             </span>
             <Link
               href="/signin"
-              className="inline-flex items-center gap-1.5 text-accent font-semibold hover:underline whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-accent text-white font-semibold hover:bg-accent/90 transition-colors whitespace-nowrap"
               data-testid="link-signin-cta"
             >
               <LogIn className="w-3.5 h-3.5" /> Sign in
             </Link>
-          </div>
-        )}
-      </section>
+          </motion.div>
+        </section>
+      )}
 
       <section className="container mx-auto max-w-5xl px-4 py-6 grid lg:grid-cols-3 gap-6">
         {/* LEFT: Setup + Recording */}
         <div className="lg:col-span-2 space-y-6">
           {/* Setup card */}
-          <Card className="p-6">
+          <motion.div
+            id="round-setup"
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, delay: 0.45, ease: [0.22, 1, 0.36, 1] }}
+            className="scroll-mt-24"
+          >
+          <Card className="p-6 border-primary/10 shadow-lg shadow-primary/5">
             <div className="flex items-start justify-between gap-3 mb-4">
-              <h2 className="font-display text-xl font-bold text-primary">Round Setup</h2>
+              <h2 className="font-display text-xl font-bold text-primary flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-accent/10 text-accent">
+                  <Mic className="w-4 h-4" />
+                </span>
+                Round Setup
+              </h2>
               <Link
                 href="/research"
                 data-testid="link-setup-research"
@@ -1694,6 +1831,7 @@ export default function PracticeBot() {
               </div>
             </div>
           </Card>
+          </motion.div>
 
           {/* Standalone speech timer (shown when no library topic is selected) */}
           {!briefingTopic && (
