@@ -19,7 +19,7 @@ import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import {
   Mic, MicOff, Video, VideoOff, Loader2, Sparkles, Download,
-  Volume2, RotateCcw, ArrowLeft, Send, AlertTriangle, Gavel, Languages,
+  Volume2, VolumeX, RotateCcw, ArrowLeft, Send, AlertTriangle, Gavel, Languages,
   FileText, Upload, X, BookOpen,
   Share2, Copy, Check, CalendarDays,
   ChevronDown, ChevronUp, Clock, Lightbulb, Timer, Pause, Play,
@@ -317,6 +317,50 @@ export default function PracticeBot() {
   const [timerRemaining, setTimerRemaining] = useState<number | null>(null);
   const [timerRunning, setTimerRunning] = useState(false);
   const timerIntervalRef = useRef<number | null>(null);
+  const [chimeMuted, setChimeMuted] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("practiceBot.chimeMuted") === "1";
+  });
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const prevTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("practiceBot.chimeMuted", chimeMuted ? "1" : "0");
+    }
+  }, [chimeMuted]);
+
+  function playChime(kind: "warning" | "end") {
+    if (chimeMuted) return;
+    try {
+      const Ctx =
+        window.AudioContext ||
+        (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Ctx) return;
+      if (!audioCtxRef.current) audioCtxRef.current = new Ctx();
+      const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      // Two-tone beep; second tone is lower for "end".
+      const tones = kind === "end"
+        ? [{ f: 880, t: 0 }, { f: 660, t: 0.18 }, { f: 523, t: 0.36 }]
+        : [{ f: 880, t: 0 }, { f: 1175, t: 0.16 }];
+      const now = ctx.currentTime;
+      tones.forEach(({ f, t }) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = f;
+        gain.gain.setValueAtTime(0.0001, now + t);
+        gain.gain.exponentialRampToValueAtTime(0.25, now + t + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.32);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(now + t);
+        osc.stop(now + t + 0.35);
+      });
+    } catch {
+      // Audio is best-effort; ignore failures.
+    }
+  }
 
   useEffect(() => {
     if (!timerRunning || timerRemaining === null) return;
@@ -337,6 +381,22 @@ export default function PracticeBot() {
       }
     };
   }, [timerRunning, timerRemaining]);
+
+  // Fire chimes when crossing the 30s warning and the 0:00 end.
+  useEffect(() => {
+    const prev = prevTimerRef.current;
+    const cur = timerRemaining;
+    if (prev !== null && cur !== null) {
+      if (prev > 30 && cur <= 30 && cur > 0) playChime("warning");
+      if (prev > 0 && cur === 0) playChime("end");
+    }
+    prevTimerRef.current = cur;
+    // playChime intentionally not in deps — it reads latest mute via state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timerRemaining]);
+
+  const timerWarning = timerRemaining !== null && timerRemaining <= 30 && timerRemaining > 0;
+  const timerEnded = timerRemaining === 0;
 
   // Reset / hide the timer when the selected topic changes.
   useEffect(() => {
@@ -1248,13 +1308,34 @@ export default function PracticeBot() {
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center gap-3 p-3 rounded-lg bg-accent/10 border border-accent/30">
+                <div
+                  data-testid="container-custom-timer"
+                  className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                    timerEnded
+                      ? "bg-destructive/15 border-destructive/50 animate-pulse"
+                      : timerWarning
+                      ? "bg-destructive/10 border-destructive/40 animate-pulse"
+                      : "bg-accent/10 border-accent/30"
+                  }`}
+                >
                   <span
                     data-testid="text-custom-timer-remaining"
-                    className="font-mono tabular-nums text-2xl font-bold text-foreground flex-1"
+                    className={`font-mono tabular-nums text-2xl font-bold flex-1 ${
+                      timerWarning || timerEnded ? "text-destructive" : "text-foreground"
+                    }`}
                   >
                     {formatClock(timerRemaining)}
                   </span>
+                  <Button
+                    data-testid="button-toggle-chime-mute"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setChimeMuted((m) => !m)}
+                    title={chimeMuted ? "Unmute chime" : "Mute chime"}
+                    aria-label={chimeMuted ? "Unmute chime" : "Mute chime"}
+                  >
+                    {chimeMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                  </Button>
                   <Button
                     data-testid="button-toggle-custom-timer"
                     size="sm"
@@ -1317,10 +1398,27 @@ export default function PracticeBot() {
               </button>
 
               {presetMinutes !== null && (
-                <div className="mt-4 flex flex-wrap items-center gap-3 p-3 rounded-lg bg-accent/10 border border-accent/30">
-                  <Timer className="w-4 h-4 text-accent flex-shrink-0" />
+                <div
+                  data-testid="container-briefing-timer"
+                  className={`mt-4 flex flex-wrap items-center gap-3 p-3 rounded-lg border transition-colors ${
+                    timerRemaining !== null && timerEnded
+                      ? "bg-destructive/15 border-destructive/50 animate-pulse"
+                      : timerRemaining !== null && timerWarning
+                      ? "bg-destructive/10 border-destructive/40 animate-pulse"
+                      : "bg-accent/10 border-accent/30"
+                  }`}
+                >
+                  <Timer
+                    className={`w-4 h-4 flex-shrink-0 ${
+                      timerRemaining !== null && (timerWarning || timerEnded) ? "text-destructive" : "text-accent"
+                    }`}
+                  />
                   <div className="text-sm flex-1 min-w-0">
-                    <div className="font-semibold text-foreground">
+                    <div
+                      className={`font-semibold ${
+                        timerRemaining !== null && (timerWarning || timerEnded) ? "text-destructive" : "text-foreground"
+                      }`}
+                    >
                       {timerRemaining === null
                         ? `${presetMinutes}-min speech timer`
                         : (
@@ -1344,6 +1442,16 @@ export default function PracticeBot() {
                     </Button>
                   ) : (
                     <div className="flex gap-2">
+                      <Button
+                        data-testid="button-toggle-chime-mute-briefing"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setChimeMuted((m) => !m)}
+                        title={chimeMuted ? "Unmute chime" : "Mute chime"}
+                        aria-label={chimeMuted ? "Unmute chime" : "Mute chime"}
+                      >
+                        {chimeMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                      </Button>
                       <Button
                         data-testid="button-toggle-timer"
                         size="sm"
