@@ -67,16 +67,17 @@ export function Navigation() {
         </div>
 
         {/* Desktop Links */}
-        <div className="hidden md:flex items-center gap-6">
-          {["About", "Services", "Formats", "Tournaments", "How It Works", "Testimonials", "FAQ"].map(
-            (item) => (
+        <div className="hidden lg:flex items-center gap-5">
+          {/* In-page marketing anchors — only show on the home page to avoid clutter on app pages */}
+          {onHome &&
+            ["About", "Services", "How It Works", "FAQ"].map((item) => (
               <button
                 key={item}
                 onClick={() =>
                   scrollToSection(item.toLowerCase().replace(/ /g, "-"))
                 }
                 data-testid={`nav-link-${item.toLowerCase().replace(/ /g, "-")}`}
-                className={`text-sm font-medium hover:text-accent transition-colors ${
+                className={`text-sm font-medium hover:text-accent transition-colors whitespace-nowrap ${
                   isDarkHero
                     ? "text-white/90 hover:text-white"
                     : "text-foreground/80 hover:text-foreground"
@@ -84,25 +85,12 @@ export function Navigation() {
               >
                 {item}
               </button>
-            )
-          )}
-
-          <Link
-            href="/dashboard"
-            data-testid="nav-link-dashboard"
-            className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors ${
-              isDarkHero
-                ? "text-white/90 hover:text-white"
-                : "text-foreground/80 hover:text-foreground"
-            }`}
-          >
-            <LayoutDashboard className="w-3.5 h-3.5" /> Dashboard
-          </Link>
+            ))}
 
           <Link
             href="/topics"
             data-testid="nav-link-topics"
-            className={`inline-flex items-center gap-1.5 text-sm font-semibold transition-colors ${
+            className={`inline-flex items-center gap-1.5 text-sm font-semibold transition-colors whitespace-nowrap ${
               isDarkHero
                 ? "text-white/90 hover:text-white"
                 : "text-foreground/80 hover:text-foreground"
@@ -114,7 +102,7 @@ export function Navigation() {
           <Link
             href="/research"
             data-testid="nav-link-research"
-            className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors ${
+            className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
               isDarkHero
                 ? "text-white/90 hover:text-white"
                 : "text-foreground/80 hover:text-foreground"
@@ -126,7 +114,7 @@ export function Navigation() {
           <Link
             href="/dashboard"
             data-testid="nav-link-dashboard"
-            className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors ${
+            className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
               isDarkHero
                 ? "text-white/90 hover:text-white"
                 : "text-foreground/80 hover:text-foreground"
@@ -138,19 +126,19 @@ export function Navigation() {
           <Link
             href="/practice"
             data-testid="nav-link-practice-bot"
-            className={`inline-flex items-center gap-1.5 text-sm font-semibold transition-colors ${
+            className={`inline-flex items-center gap-1.5 text-sm font-semibold transition-colors whitespace-nowrap ${
               isDarkHero
                 ? "text-white hover:text-accent"
                 : "text-accent hover:text-accent/80"
             }`}
           >
-            <Mic className="w-3.5 h-3.5" /> Practice Bot
+            <Mic className="w-3.5 h-3.5" /> Practice
           </Link>
 
           <Link
             href="/pricing"
             data-testid="nav-link-pricing"
-            className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors ${
+            className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
               isDarkHero
                 ? "text-white/90 hover:text-white"
                 : "text-foreground/80 hover:text-foreground"
@@ -252,7 +240,7 @@ export function Navigation() {
         </div>
 
         {/* Mobile Menu Toggle */}
-        <div className="md:hidden flex items-center gap-2">
+        <div className="lg:hidden flex items-center gap-2">
           <button
             onClick={() =>
               setTheme(resolved === "light" ? "dark" : "light")
@@ -282,7 +270,7 @@ export function Navigation() {
 
       {/* Mobile Menu */}
       {mobileMenuOpen && (
-        <div className="md:hidden absolute top-full left-0 right-0 bg-background border-b border-border shadow-xl p-4 flex flex-col gap-4 animate-in slide-in-from-top-5">
+        <div className="lg:hidden absolute top-full left-0 right-0 bg-background border-b border-border shadow-xl p-4 flex flex-col gap-4 animate-in slide-in-from-top-5 max-h-[85vh] overflow-y-auto">
           {[
             "Home",
             "About",
@@ -305,14 +293,6 @@ export function Navigation() {
               {item}
             </button>
           ))}
-          <Link
-            href="/dashboard"
-            data-testid="button-nav-dashboard"
-            onClick={() => setMobileMenuOpen(false)}
-            className="flex items-center gap-2 text-left text-lg font-semibold text-foreground py-2 border-b border-border/50"
-          >
-            <LayoutDashboard className="w-4 h-4" /> Dashboard
-          </Link>
           <Link
             href="/topics"
             data-testid="button-nav-topics"
