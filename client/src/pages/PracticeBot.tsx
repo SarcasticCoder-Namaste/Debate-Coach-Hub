@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Mic, MicOff, Video, VideoOff, Loader2, Sparkles, Download,
   Volume2, RotateCcw, ArrowLeft, Send, AlertTriangle, Star,
+  FileText, Upload, X, BookOpen,
 } from "lucide-react";
 
 type Side = "Aff" | "Neg";
@@ -56,6 +57,14 @@ function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
   };
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
+type PacketContext = {
+  title: string;
+  summary: string;
+  keyPoints: string[];
+  excerpt: string;
+};
+type PacketStats = { characters: number; truncated: boolean; source: "pdf" | "docx" | "text" };
+
 type Feedback = {
   clarity?: { score: number; comment: string };
   structure?: { score: number; comment: string };
@@ -161,6 +170,14 @@ export default function PracticeBot() {
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [liveTranscript, setLiveTranscript] = useState<string>("");
+
+  // topic packet (session-only)
+  const [packet, setPacket] = useState<PacketContext | null>(null);
+  const [packetStats, setPacketStats] = useState<PacketStats | null>(null);
+  const [packetTitle, setPacketTitle] = useState("");
+  const [packetText, setPacketText] = useState("");
+  const [packetLoading, setPacketLoading] = useState(false);
+  const packetFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // refs
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -375,6 +392,7 @@ export default function PracticeBot() {
           side,
           format,
           history: nextHistory,
+          packet,
         }),
       });
       if (!res.ok) throw new Error("bot failed");
@@ -419,6 +437,94 @@ export default function PracticeBot() {
     } finally {
       setFeedbackLoading(false);
     }
+  }
+
+  /* ---------- topic packet ---------- */
+  async function ingestPacket(payload: { text?: string; pdf?: string; docx?: string; fileName?: string }) {
+    setPacketLoading(true);
+    try {
+      const res = await fetch("/api/practice/packet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, title: packetTitle.trim() || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({
+          title: "Couldn't load packet",
+          description: data?.error || "Try a different file or paste the text.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setPacket(data.packet as PacketContext);
+      setPacketStats(data.stats as PacketStats);
+      toast({
+        title: "Packet loaded",
+        description: `"${data.packet.title}" — the bot will reference it in the round.`,
+      });
+    } catch {
+      toast({
+        title: "Packet upload failed",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setPacketLoading(false);
+    }
+  }
+
+  async function submitPacketText() {
+    const t = packetText.trim();
+    if (!t) return;
+    await ingestPacket({ text: t });
+  }
+
+  async function submitPacketFile(file: File) {
+    if (file.size > 4 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please keep packets under 4 MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const lower = file.name.toLowerCase();
+    const isPdf = file.type === "application/pdf" || lower.endsWith(".pdf");
+    const isDocx =
+      file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      lower.endsWith(".docx");
+    if (isPdf) {
+      const base64 = await blobToBase64(file);
+      await ingestPacket({ pdf: base64, fileName: file.name });
+    } else if (isDocx) {
+      const base64 = await blobToBase64(file);
+      await ingestPacket({ docx: base64, fileName: file.name });
+    } else if (
+      file.type.startsWith("text/") ||
+      lower.endsWith(".txt") ||
+      lower.endsWith(".md")
+    ) {
+      const text = await file.text();
+      if (!packetTitle.trim()) {
+        setPacketTitle(file.name.replace(/\.[^.]+$/, "").slice(0, 80));
+      }
+      await ingestPacket({ text, fileName: file.name });
+    } else {
+      toast({
+        title: "Unsupported file",
+        description: "Upload a PDF, .docx, .txt, or .md, or paste the text below.",
+        variant: "destructive",
+      });
+    }
+  }
+
+  function clearPacket() {
+    setPacket(null);
+    setPacketStats(null);
+    setPacketTitle("");
+    setPacketText("");
+    if (packetFileInputRef.current) packetFileInputRef.current.value = "";
   }
 
   function resetRound() {
@@ -528,6 +634,139 @@ export default function PracticeBot() {
                 </Select>
               </div>
             </div>
+          </Card>
+
+          {/* Topic packet card */}
+          <Card className="p-6" data-testid="card-topic-packet">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h2 className="font-display text-xl font-bold text-primary flex items-center gap-2">
+                  <BookOpen className="w-5 h-5 text-accent" /> Topic Packet
+                </h2>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Paste or upload your coach's brief / evidence packet. The bot will reference its
+                  framing and cards in the round. Stays only for this session.
+                </p>
+              </div>
+              {packet && (
+                <button
+                  data-testid="button-clear-packet"
+                  onClick={clearPacket}
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  <X className="w-3 h-3" /> Remove
+                </button>
+              )}
+            </div>
+
+            {!packet && (
+              <div className="space-y-3">
+                <input
+                  data-testid="input-packet-title"
+                  value={packetTitle}
+                  onChange={(e) => setPacketTitle(e.target.value)}
+                  placeholder="Packet title (optional, e.g. 'NSDA Sept UBI brief')"
+                  disabled={packetLoading}
+                  className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <textarea
+                  data-testid="input-packet-text"
+                  value={packetText}
+                  onChange={(e) => setPacketText(e.target.value)}
+                  placeholder="Paste the brief, framing, and evidence cards here…"
+                  disabled={packetLoading}
+                  rows={5}
+                  className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-y"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    data-testid="button-submit-packet-text"
+                    onClick={submitPacketText}
+                    disabled={!packetText.trim() || packetLoading}
+                    className="bg-primary"
+                  >
+                    {packetLoading ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Reading…</>
+                    ) : (
+                      <><FileText className="w-4 h-4 mr-2" /> Use pasted text</>
+                    )}
+                  </Button>
+                  <Button
+                    data-testid="button-upload-packet"
+                    type="button"
+                    variant="outline"
+                    onClick={() => packetFileInputRef.current?.click()}
+                    disabled={packetLoading}
+                  >
+                    <Upload className="w-4 h-4 mr-2" /> Upload PDF / Word / text
+                  </Button>
+                  <input
+                    ref={packetFileInputRef}
+                    data-testid="input-packet-file"
+                    type="file"
+                    accept=".pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.txt,.md,text/plain,text/markdown"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) submitPacketFile(f);
+                    }}
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Supports PDF, Word (.docx), .txt, or .md up to 4&nbsp;MB. Long packets are summarized; nothing is saved server-side.
+                </p>
+              </div>
+            )}
+
+            {packet && (
+              <div className="space-y-3" data-testid="packet-loaded">
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-accent/10 border border-accent/30">
+                  <FileText className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-foreground" data-testid="text-packet-title">
+                      {packet.title}
+                    </div>
+                    {packetStats && (
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
+                        {packetStats.source === "pdf"
+                          ? "PDF"
+                          : packetStats.source === "docx"
+                          ? "Word (.docx)"
+                          : "Pasted text"}{" "}
+                        ·{" "}
+                        {packetStats.characters.toLocaleString()} chars
+                        {packetStats.truncated ? " (trimmed for the bot)" : ""}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider font-bold text-primary mb-1">
+                    Summary
+                  </div>
+                  <p className="text-sm text-foreground/90 leading-relaxed" data-testid="text-packet-summary">
+                    {packet.summary}
+                  </p>
+                </div>
+                {packet.keyPoints.length > 0 && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider font-bold text-primary mb-1">
+                      Key points the bot will use
+                    </div>
+                    <ul className="text-sm text-foreground/90 space-y-1 list-disc pl-5">
+                      {packet.keyPoints.slice(0, 8).map((p, i) => (
+                        <li key={i} data-testid={`packet-keypoint-${i}`}>{p}</li>
+                      ))}
+                      {packet.keyPoints.length > 8 && (
+                        <li className="text-muted-foreground italic">
+                          + {packet.keyPoints.length - 8} more
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
           </Card>
 
           {/* Recording card */}
