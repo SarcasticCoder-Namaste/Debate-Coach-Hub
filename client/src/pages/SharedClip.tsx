@@ -1,8 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useRoute } from "wouter";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Navigation } from "@/components/Navigation";
-import { ArrowLeft, Clock, Loader2, Star, Volume2, AlertTriangle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { ArrowLeft, Clock, Loader2, MessageSquare, Star, Volume2, AlertTriangle, Send, Sparkles } from "lucide-react";
 
 type Turn = { role: "user" | "assistant"; content: string };
 type Feedback = {
@@ -12,6 +16,15 @@ type Feedback = {
   delivery?: { score: number; comment: string };
   tip?: string;
 } | null;
+
+interface ShareComment {
+  id: number;
+  shareId: string;
+  coachName: string;
+  comment: string;
+  timestampSec: number;
+  createdAt: string;
+}
 
 interface ShareData {
   id: string;
@@ -24,6 +37,14 @@ interface ShareData {
   createdAt: string;
   expiresAt: string | null;
   videoUrl: string;
+  comments: ShareComment[];
+}
+
+function formatTime(sec: number): string {
+  const s = Math.max(0, Math.floor(sec));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${r.toString().padStart(2, "0")}`;
 }
 
 function ScoreRow({ label, item }: { label: string; item?: { score: number; comment: string } }) {
@@ -48,13 +69,37 @@ function ScoreRow({ label, item }: { label: string; item?: { score: number; comm
   );
 }
 
+const SEEN_KEY = (id: string) => `share-comments-seen-${id}`;
+
 export default function SharedClip() {
   const [, params] = useRoute("/share/:id");
   const id = params?.id;
+  const { toast } = useToast();
 
   const [data, setData] = useState<ShareData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
+  const [currentTime, setCurrentTime] = useState(0);
+
+  const [coachName, setCoachName] = useState("");
+  const [comment, setComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const [seenIds, setSeenIds] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (!id) return;
+    try {
+      const raw = localStorage.getItem(SEEN_KEY(id));
+      if (raw) setSeenIds(new Set(JSON.parse(raw) as number[]));
+    } catch { /* ignore */ }
+    try {
+      const savedName = localStorage.getItem("share-coach-name");
+      if (savedName) setCoachName(savedName);
+    } catch { /* ignore */ }
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
@@ -78,6 +123,80 @@ export default function SharedClip() {
     load();
     return () => { cancelled = true; };
   }, [id]);
+
+  const newCommentCount = useMemo(() => {
+    if (!data) return 0;
+    return data.comments.filter((c) => !seenIds.has(c.id)).length;
+  }, [data, seenIds]);
+
+  function markAllSeen() {
+    if (!data || !id) return;
+    const all = new Set(data.comments.map((c) => c.id));
+    setSeenIds(all);
+    try {
+      localStorage.setItem(SEEN_KEY(id), JSON.stringify(Array.from(all)));
+    } catch { /* ignore */ }
+  }
+
+  function seekTo(sec: number) {
+    const m = mediaRef.current;
+    if (!m) return;
+    try {
+      m.currentTime = sec;
+      void m.play().catch(() => { /* user gesture may be required */ });
+    } catch { /* ignore */ }
+  }
+
+  async function submitComment(e: React.FormEvent) {
+    e.preventDefault();
+    if (!id || !data) return;
+    const name = coachName.trim();
+    const body = comment.trim();
+    if (!name) {
+      toast({ title: "Add your name", description: "Coaches sign their feedback so students know who it's from.", variant: "destructive" });
+      return;
+    }
+    if (!body) {
+      toast({ title: "Comment is empty", description: "Write a quick note before sending.", variant: "destructive" });
+      return;
+    }
+    if (body.length > 1000) {
+      toast({ title: "Too long", description: "Keep comments under 1000 characters.", variant: "destructive" });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const ts = Math.max(0, Math.floor(mediaRef.current?.currentTime ?? currentTime));
+      const res = await fetch(`/api/practice/shares/${id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ coachName: name, comment: body, timestampSec: ts }),
+      });
+      if (res.status === 429) {
+        throw new Error("Too many comments — please wait a bit before posting again.");
+      }
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error ?? "Could not save comment");
+      }
+      const created = (await res.json()) as ShareComment;
+      setData((prev) => prev ? { ...prev, comments: [...prev.comments, created].sort((a, b) => a.timestampSec - b.timestampSec || a.id - b.id) } : prev);
+      // Mark our own comment as seen so we don't notify ourselves.
+      setSeenIds((prev) => {
+        const next = new Set(prev);
+        next.add(created.id);
+        try { localStorage.setItem(SEEN_KEY(id!), JSON.stringify(Array.from(next))); } catch { /* ignore */ }
+        return next;
+      });
+      try { localStorage.setItem("share-coach-name", name); } catch { /* ignore */ }
+      setComment("");
+      toast({ title: "Comment posted", description: `Tied to ${formatTime(ts)} of the recording.` });
+    } catch (err) {
+      toast({ title: "Couldn't post", description: err instanceof Error ? err.message : "Try again.", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   const isAudioOnly = data?.mimeType?.startsWith("audio/");
   const expiresLabel = data?.expiresAt
@@ -151,20 +270,134 @@ export default function SharedClip() {
               <h2 className="font-display text-lg font-bold text-primary mb-3">Recording</h2>
               {isAudioOnly ? (
                 <audio
+                  ref={(el) => { mediaRef.current = el; }}
                   data-testid="share-audio"
                   src={data.videoUrl}
                   controls
                   className="w-full"
+                  onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                 />
               ) : (
                 <video
+                  ref={(el) => { mediaRef.current = el; }}
                   data-testid="share-video"
                   src={data.videoUrl}
                   controls
                   playsInline
                   className="w-full rounded-xl bg-black aspect-video"
+                  onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                 />
               )}
+            </Card>
+
+            <Card className="p-6" data-testid="card-coach-comments">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <h2 className="font-display text-lg font-bold text-primary flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-accent" /> Coach Comments
+                  <span className="text-xs font-normal text-muted-foreground" data-testid="text-comment-count">
+                    ({data.comments.length})
+                  </span>
+                </h2>
+                {newCommentCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={markAllSeen}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-accent text-accent-foreground hover-elevate active-elevate-2"
+                    data-testid="button-mark-seen"
+                  >
+                    <Sparkles className="w-3 h-3" /> {newCommentCount} new — mark as seen
+                  </button>
+                )}
+              </div>
+
+              {data.comments.length === 0 ? (
+                <p className="text-sm text-muted-foreground mb-6" data-testid="text-no-comments">
+                  No comments yet. Coaches: leave the first timestamped note below.
+                </p>
+              ) : (
+                <ul className="space-y-3 mb-6">
+                  {data.comments.map((c) => {
+                    const isNew = !seenIds.has(c.id);
+                    return (
+                      <li
+                        key={c.id}
+                        data-testid={`comment-${c.id}`}
+                        className={`p-3 rounded-lg border ${isNew ? "border-accent/50 bg-accent/5" : "border-border bg-muted/30"}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <button
+                            type="button"
+                            onClick={() => seekTo(c.timestampSec)}
+                            className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md font-mono text-xs font-bold bg-primary text-primary-foreground hover-elevate active-elevate-2"
+                            data-testid={`button-seek-${c.id}`}
+                            aria-label={`Jump to ${formatTime(c.timestampSec)}`}
+                          >
+                            <Clock className="w-3 h-3" /> {formatTime(c.timestampSec)}
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <span className="text-sm font-semibold text-foreground" data-testid={`text-coach-name-${c.id}`}>
+                                {c.coachName}
+                              </span>
+                              {isNew && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider font-bold bg-accent text-accent-foreground" data-testid={`badge-new-${c.id}`}>
+                                  New
+                                </span>
+                              )}
+                              <span className="text-[11px] text-muted-foreground ml-auto">
+                                {new Date(c.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                              </span>
+                            </div>
+                            <p className="text-sm text-foreground whitespace-pre-wrap break-words" data-testid={`text-comment-body-${c.id}`}>
+                              {c.comment}
+                            </p>
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              <form onSubmit={submitComment} className="space-y-3 pt-4 border-t border-border" data-testid="form-comment">
+                <div className="flex flex-col md:flex-row md:items-center gap-3">
+                  <Input
+                    placeholder="Your name (e.g. Coach Rivera)"
+                    value={coachName}
+                    onChange={(e) => setCoachName(e.target.value)}
+                    maxLength={60}
+                    className="md:max-w-xs"
+                    data-testid="input-coach-name"
+                  />
+                  <div className="text-xs text-muted-foreground">
+                    Posting at{" "}
+                    <span className="font-mono font-bold text-foreground" data-testid="text-current-time">
+                      {formatTime(mediaRef.current?.currentTime ?? currentTime)}
+                    </span>{" "}
+                    — pause the recording at the moment you want to comment on.
+                  </div>
+                </div>
+                <Textarea
+                  placeholder="Leave a quick note for the student. Tie your feedback to what's happening at this timestamp."
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  maxLength={1000}
+                  rows={3}
+                  data-testid="textarea-comment"
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-muted-foreground">
+                    {comment.length}/1000
+                  </span>
+                  <Button type="submit" disabled={submitting} data-testid="button-submit-comment">
+                    {submitting ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Posting…</>
+                    ) : (
+                      <><Send className="w-4 h-4 mr-2" /> Post comment</>
+                    )}
+                  </Button>
+                </div>
+              </form>
             </Card>
 
             <Card className="p-6">

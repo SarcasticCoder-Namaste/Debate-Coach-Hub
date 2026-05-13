@@ -480,3 +480,21 @@ export const updateLeadSchema = z.object({
 export type Lead = typeof leads.$inferSelect;
 export type InsertLead = z.infer<typeof insertLeadSchema>;
 export type UpdateLead = z.infer<typeof updateLeadSchema>;
+
+export const practiceShareComments = pgTable("practice_share_comments", {
+  id: serial("id").primaryKey(),
+  shareId: text("share_id").notNull().references(() => practiceShares.id, { onDelete: "cascade" }),
+  coachName: text("coach_name").notNull(),
+  comment: text("comment").notNull(),
+  timestampSec: integer("timestamp_sec").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertPracticeShareCommentSchema = createInsertSchema(practiceShareComments, {
+  coachName: z.string().trim().min(1, "Name is required").max(60),
+  comment: z.string().trim().min(1, "Comment is required").max(1000),
+  timestampSec: z.number().int().min(0).max(60 * 60 * 12),
+}).omit({ id: true, createdAt: true });
+
+export type PracticeShareComment = typeof practiceShareComments.$inferSelect;
+export type InsertPracticeShareComment = z.infer<typeof insertPracticeShareCommentSchema>;

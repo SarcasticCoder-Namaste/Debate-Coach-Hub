@@ -8,7 +8,12 @@ import type {
 import { openai, ensureCompatibleFormat, speechToText } from "./replit_integrations/audio/client";
 import { ObjectStorageService, ObjectNotFoundError } from "./replit_integrations/object_storage";
 import { storage } from "./storage";
-import { insertPracticeShareSchema } from "@shared/schema";
+import {
+  feedbackPayloadSchema,
+  insertPracticeShareSchema,
+  insertPracticeShareCommentSchema,
+  turnSchema,
+} from "@shared/schema";
 import {
   checkPracticeMinutes,
   recordPracticeMinutes,
@@ -406,6 +411,7 @@ function makeRateLimiter(max: number, windowMs: number) {
 
 const limitInit = makeRateLimiter(20, 60 * 60 * 1000);     // 20 init / hr / IP
 const limitFinalize = makeRateLimiter(10, 60 * 60 * 1000); // 10 saves / hr / IP
+const limitComment = makeRateLimiter(15, 10 * 60 * 1000);  // 15 comments / 10 min / IP
 
 function clientIp(req: Request): string {
   const fwd = req.headers["x-forwarded-for"];
@@ -870,6 +876,7 @@ export function registerPracticeRoutes(app: Express) {
       await storage.deletePracticeShare(row.id);
       return res.status(410).json({ error: "This share has expired" });
     }
+    const comments = await storage.listPracticeShareComments(row.id);
     res.json({
       id: row.id,
       mimeType: row.mimeType,
@@ -882,7 +889,55 @@ export function registerPracticeRoutes(app: Express) {
       createdAt: row.createdAt,
       expiresAt: row.expiresAt,
       videoUrl: `/api/practice/shares/${row.id}/video`,
+      comments,
     });
+  });
+
+  // List coach comments for a share.
+  app.get("/api/practice/shares/:id/comments", async (req: Request, res: Response) => {
+    const id = String(req.params.id ?? "");
+    if (!/^[A-Za-z0-9_-]{6,16}$/.test(id)) {
+      return res.status(400).json({ error: "Invalid id" });
+    }
+    const row = await storage.getPracticeShare(id);
+    if (!row) return res.status(404).json({ error: "Not found" });
+    if (row.expiresAt && row.expiresAt.getTime() < Date.now()) {
+      return res.status(410).json({ error: "Expired" });
+    }
+    const comments = await storage.listPracticeShareComments(id);
+    res.json({ comments });
+  });
+
+  // Add a coach comment tied to a video timestamp.
+  app.post("/api/practice/shares/:id/comments", async (req: Request, res: Response) => {
+    if (!limitComment(clientIp(req))) {
+      return res.status(429).json({ error: "Too many comments — please slow down." });
+    }
+    const id = String(req.params.id ?? "");
+    if (!/^[A-Za-z0-9_-]{6,16}$/.test(id)) {
+      return res.status(400).json({ error: "Invalid id" });
+    }
+    const row = await storage.getPracticeShare(id);
+    if (!row) return res.status(404).json({ error: "Not found" });
+    if (row.expiresAt && row.expiresAt.getTime() < Date.now()) {
+      return res.status(410).json({ error: "This share has expired" });
+    }
+    const parsed = insertPracticeShareCommentSchema.safeParse({
+      shareId: id,
+      coachName: req.body?.coachName,
+      comment: req.body?.comment,
+      timestampSec: Math.floor(Number(req.body?.timestampSec ?? 0)),
+    });
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors[0]?.message ?? "Invalid comment" });
+    }
+    try {
+      const created = await storage.createPracticeShareComment(parsed.data);
+      res.status(201).json(created);
+    } catch (err) {
+      console.error("share comment create error", err);
+      res.status(500).json({ error: "Could not save comment" });
+    }
   });
 
   // Stream the recorded video/audio for a share. Supports HTTP Range so

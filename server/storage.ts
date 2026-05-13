@@ -1,6 +1,7 @@
 import {
   inquiries,
   practiceShares,
+  practiceShareComments,
   subscriptions,
   researchBundles,
   users,
@@ -11,6 +12,8 @@ import {
   type Inquiry,
   type InsertPracticeShare,
   type PracticeShare,
+  type InsertPracticeShareComment,
+  type PracticeShareComment,
   type Subscription,
   type InsertResearchBundle,
   type ResearchBundleRow,
@@ -26,7 +29,7 @@ import {
   type UpdateLead,
 } from "@shared/schema";
 import { db } from "./db";
-import { and, eq, lt, desc, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lt } from "drizzle-orm";
 
 export interface IStorage {
   createInquiry(inquiry: InsertInquiry): Promise<Inquiry>;
@@ -61,7 +64,6 @@ export interface IStorage {
   listPracticeRounds(userId: number): Promise<PracticeRound[]>;
   getPracticeRound(userId: number, id: number): Promise<PracticeRound | undefined>;
   deletePracticeRound(userId: number, id: number): Promise<boolean>;
-
   listCoaches(): Promise<Coach[]>;
   getCoach(id: number): Promise<Coach | undefined>;
   upsertCoachBySlug(coach: InsertCoach): Promise<Coach>;
@@ -69,6 +71,9 @@ export interface IStorage {
   createLead(lead: InsertLead): Promise<Lead>;
   listLeads(): Promise<Lead[]>;
   updateLead(id: number, patch: UpdateLead): Promise<Lead | undefined>;
+
+  createPracticeShareComment(c: InsertPracticeShareComment): Promise<PracticeShareComment>;
+  listPracticeShareComments(shareId: string): Promise<PracticeShareComment[]>;
 }
 
 function nextPeriodEnd(from: Date, interval: string): Date {
@@ -331,6 +336,19 @@ export class DatabaseStorage implements IStorage {
       .where(eq(leads.id, id))
       .returning();
     return updated;
+  }
+
+  async createPracticeShareComment(c: InsertPracticeShareComment): Promise<PracticeShareComment> {
+    const [row] = await db.insert(practiceShareComments).values(c).returning();
+    return row;
+  }
+
+  async listPracticeShareComments(shareId: string): Promise<PracticeShareComment[]> {
+    return db
+      .select()
+      .from(practiceShareComments)
+      .where(eq(practiceShareComments.shareId, shareId))
+      .orderBy(asc(practiceShareComments.timestampSec), asc(practiceShareComments.createdAt));
   }
 }
 
