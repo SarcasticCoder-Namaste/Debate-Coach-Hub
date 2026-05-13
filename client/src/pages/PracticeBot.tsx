@@ -338,8 +338,34 @@ export default function PracticeBot() {
     return m ? parseInt(m[1], 10) : null;
   }, [briefingTopic]);
 
+  // Per-format speech-length presets (minutes) used when no library topic
+  // is selected. Mirrors the common speech lengths in each format.
+  const FORMAT_TIMER_PRESETS: Record<FormatKey, number[]> = {
+    LD: [4, 6, 7],
+    PF: [2, 3, 4],
+    Policy: [5, 8],
+    Parli: [5, 7, 8],
+    Congress: [3],
+    Worlds: [4, 8],
+  };
+  const formatPresets = FORMAT_TIMER_PRESETS[format] ?? [1, 2, 3, 4, 6];
+  const [customTimerMinutes, setCustomTimerMinutes] = useState<string>("");
+
   function startPresetTimer(mins: number) {
     setTimerRemaining(mins * 60);
+    setTimerRunning(true);
+  }
+  function startCustomTimer() {
+    const n = parseFloat(customTimerMinutes);
+    if (!Number.isFinite(n) || n <= 0 || n > 60) {
+      toast({
+        title: "Invalid timer length",
+        description: "Enter a number of minutes between 0 and 60.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setTimerRemaining(Math.round(n * 60));
     setTimerRunning(true);
   }
   function formatClock(secs: number) {
@@ -1057,6 +1083,91 @@ export default function PracticeBot() {
               </div>
             </div>
           </Card>
+
+          {/* Standalone speech timer (shown when no library topic is selected) */}
+          {!briefingTopic && (
+            <Card className="p-6" data-testid="card-speech-timer">
+              <div className="flex items-start gap-2 mb-3">
+                <Timer className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <h2 className="font-display text-xl font-bold text-primary leading-tight">
+                    Speech Timer
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Pick a common speech length for {FORMAT_LABELS[format]} or set your own.
+                  </p>
+                </div>
+              </div>
+
+              {timerRemaining === null ? (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    {formatPresets.map((mins) => (
+                      <Button
+                        key={mins}
+                        data-testid={`button-timer-preset-${mins}`}
+                        size="sm"
+                        variant="outline"
+                        onClick={() => startPresetTimer(mins)}
+                        className="hover-elevate"
+                      >
+                        <Play className="w-3.5 h-3.5 mr-1" /> {mins} min
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      data-testid="input-custom-timer-minutes"
+                      type="number"
+                      min={0.5}
+                      max={60}
+                      step={0.5}
+                      value={customTimerMinutes}
+                      onChange={(e) => setCustomTimerMinutes(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") startCustomTimer(); }}
+                      placeholder="Custom minutes"
+                      className="w-36 px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <Button
+                      data-testid="button-start-custom-timer"
+                      size="sm"
+                      onClick={startCustomTimer}
+                      disabled={!customTimerMinutes.trim()}
+                      className="bg-accent hover:bg-accent/90 text-accent-foreground"
+                    >
+                      <Play className="w-3.5 h-3.5 mr-1" /> Start
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-accent/10 border border-accent/30">
+                  <span
+                    data-testid="text-custom-timer-remaining"
+                    className="font-mono tabular-nums text-2xl font-bold text-foreground flex-1"
+                  >
+                    {formatClock(timerRemaining)}
+                  </span>
+                  <Button
+                    data-testid="button-toggle-custom-timer"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setTimerRunning((r) => !r)}
+                    disabled={timerRemaining === 0}
+                  >
+                    {timerRunning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                  </Button>
+                  <Button
+                    data-testid="button-reset-custom-timer"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => { setTimerRunning(false); setTimerRemaining(null); }}
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              )}
+            </Card>
+          )}
 
           {/* Topic briefing card (only when a library topic is selected) */}
           {briefingTopic && (
