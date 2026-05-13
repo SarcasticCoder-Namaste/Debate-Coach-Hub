@@ -19,6 +19,7 @@ import {
   Calendar,
   ArrowRight,
   LogIn,
+  Film,
 } from "lucide-react";
 import {
   LineChart,
@@ -656,30 +657,42 @@ export default function History() {
               )}
             </div>
           )}
-          <DialogFooter className="flex flex-row justify-between sm:justify-between gap-2">
-            {openId && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  if (!detail.data) return;
-                  setRenameId(detail.data.id);
-                  setRenameValue(detail.data.title || "");
-                }}
-                data-testid="button-rename-detail"
-              >
-                <Pencil className="w-4 h-4 mr-1.5" /> Rename
-              </Button>
+          <DialogFooter className="flex flex-row justify-between sm:justify-between gap-2 flex-wrap">
+            {openId && detail.data?.hasMedia && (
+              <Link href={`/clips/new/${openId}`}>
+                <Button
+                  data-testid="button-create-clip-detail"
+                  className="bg-accent hover:bg-accent/90 text-white"
+                >
+                  <Film className="w-4 h-4 mr-1.5" /> Create highlight clip
+                </Button>
+              </Link>
             )}
-            {openId && (
-              <Button
-                variant="outline"
-                onClick={() => setConfirmDeleteId(openId)}
-                data-testid="button-delete-detail"
-                className="text-destructive border-destructive/30 hover:bg-destructive/10"
-              >
-                <Trash2 className="w-4 h-4 mr-1.5" /> Delete
-              </Button>
-            )}
+            <div className="flex gap-2 ml-auto">
+              {openId && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (!detail.data) return;
+                    setRenameId(detail.data.id);
+                    setRenameValue(detail.data.title || "");
+                  }}
+                  data-testid="button-rename-detail"
+                >
+                  <Pencil className="w-4 h-4 mr-1.5" /> Rename
+                </Button>
+              )}
+              {openId && (
+                <Button
+                  variant="outline"
+                  onClick={() => setConfirmDeleteId(openId)}
+                  data-testid="button-delete-detail"
+                  className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                >
+                  <Trash2 className="w-4 h-4 mr-1.5" /> Delete
+                </Button>
+              )}
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -16,6 +16,8 @@ import Pricing from "@/pages/Pricing";
 import Research from "@/pages/Research";
 import Dashboard from "@/pages/Dashboard";
 import History from "@/pages/History";
+import ClipEditor from "@/pages/ClipEditor";
+import PublicClip from "@/pages/PublicClip";
 import Coaches from "@/pages/Coaches";
 import AdminLeads from "@/pages/AdminLeads";
 import Drills from "@/pages/Drills";
@@ -57,6 +59,8 @@ function Router() {
       <Route path="/my-research" component={Dashboard} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/history" component={History} />
+      <Route path="/clips/new/:sessionId" component={ClipEditor} />
+      <Route path="/clips/:id" component={PublicClip} />
       <Route path="/coaches" component={Coaches} />
       <Route path="/teams" component={Teams} />
       <Route path="/teams/join/:code" component={TeamJoin} />

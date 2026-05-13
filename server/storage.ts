@@ -3,6 +3,7 @@ import {
   practiceShares,
   practiceShareComments,
   practiceSessions,
+  practiceClips,
   subscriptions,
   researchBundles,
   users,
@@ -25,6 +26,7 @@ import {
   type InsertPracticeShareComment,
   type PracticeShareComment,
   type PracticeSession,
+  type PracticeClip,
   type Subscription,
   type InsertResearchBundle,
   type ResearchBundleRow,
@@ -152,6 +154,12 @@ export interface IStorage {
 
   createSessionComment(roundId: number, authorId: number, body: string): Promise<SessionComment>;
   listSessionComments(roundId: number): Promise<Array<SessionComment & { authorName: string | null; authorEmail: string }>>;
+
+  createPracticeClip(clip: PracticeClip): Promise<PracticeClip>;
+  getPracticeClip(id: string): Promise<PracticeClip | undefined>;
+  listPracticeClipsBySession(sessionId: string, userEmail: string): Promise<PracticeClip[]>;
+  incrementClipViewCount(id: string): Promise<void>;
+  deletePracticeClip(id: string, userEmail: string): Promise<PracticeClip | undefined>;
 }
 
 function nextPeriodEnd(from: Date, interval: string): Date {
@@ -475,6 +483,44 @@ export class DatabaseStorage implements IStorage {
 
   async createPracticeShareComment(c: InsertPracticeShareComment): Promise<PracticeShareComment> {
     const [row] = await db.insert(practiceShareComments).values(c).returning();
+    return row;
+  }
+
+  async createPracticeClip(clip: PracticeClip): Promise<PracticeClip> {
+    const [row] = await db.insert(practiceClips).values(clip).returning();
+    return row;
+  }
+
+  async getPracticeClip(id: string): Promise<PracticeClip | undefined> {
+    const [row] = await db.select().from(practiceClips).where(eq(practiceClips.id, id));
+    return row;
+  }
+
+  async listPracticeClipsBySession(
+    sessionId: string,
+    userEmail: string,
+  ): Promise<PracticeClip[]> {
+    return db
+      .select()
+      .from(practiceClips)
+      .where(and(eq(practiceClips.sessionId, sessionId), eq(practiceClips.userEmail, userEmail)))
+      .orderBy(desc(practiceClips.createdAt));
+  }
+
+  async incrementClipViewCount(id: string): Promise<void> {
+    const existing = await this.getPracticeClip(id);
+    if (!existing) return;
+    await db
+      .update(practiceClips)
+      .set({ viewCount: existing.viewCount + 1 })
+      .where(eq(practiceClips.id, id));
+  }
+
+  async deletePracticeClip(id: string, userEmail: string): Promise<PracticeClip | undefined> {
+    const [row] = await db
+      .delete(practiceClips)
+      .where(and(eq(practiceClips.id, id), eq(practiceClips.userEmail, userEmail)))
+      .returning();
     return row;
   }
 

@@ -834,3 +834,59 @@ export const createSessionCommentSchema = z.object({
   body: z.string().trim().min(1, "Comment is required").max(2000),
 });
 export type SessionComment = typeof sessionComments.$inferSelect;
+
+/* ------------------------------------------------------------------ */
+/*  Practice highlight clips — short MP4s rendered from a session     */
+/* ------------------------------------------------------------------ */
+
+export const practiceClips = pgTable("practice_clips", {
+  id: text("id").primaryKey(),
+  sessionId: text("session_id").notNull(),
+  userEmail: text("user_email").notNull(),
+  topic: text("topic").notNull(),
+  side: text("side").notNull(),
+  format: text("format").notNull(),
+  startSec: integer("start_sec").notNull(),
+  endSec: integer("end_sec").notNull(),
+  durationSec: integer("duration_sec").notNull(),
+  overlayName: text("overlay_name"),
+  overlayTopic: boolean("overlay_topic").notNull().default(true),
+  overlayScore: integer("overlay_score"),
+  overlayWatermark: boolean("overlay_watermark").notNull().default(true),
+  objectPath: text("object_path").notNull(),
+  posterPath: text("poster_path"),
+  mimeType: text("mime_type").notNull().default("video/mp4"),
+  sizeBytes: integer("size_bytes").notNull().default(0),
+  viewCount: integer("view_count").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type PracticeClip = typeof practiceClips.$inferSelect;
+
+export const CLIP_MIN_SEC = 15;
+export const CLIP_MAX_SEC = 60;
+
+export const createClipSchema = z.object({
+  startSec: z.number().int().min(0),
+  endSec: z.number().int().min(CLIP_MIN_SEC),
+  overlayName: z.string().trim().max(80).nullable().optional(),
+  overlayTopic: z.boolean().default(true),
+  overlayScore: z.number().int().min(0).max(100).nullable().optional(),
+  overlayWatermark: z.boolean().default(true),
+}).superRefine((val, ctx) => {
+  const dur = val.endSec - val.startSec;
+  if (dur < CLIP_MIN_SEC) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["endSec"], message: `Clip must be at least ${CLIP_MIN_SEC}s.` });
+  }
+  if (dur > CLIP_MAX_SEC) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["endSec"], message: `Clip can be at most ${CLIP_MAX_SEC}s.` });
+  }
+});
+export type CreateClipInput = z.infer<typeof createClipSchema>;
+
+export const clipSuggestionSchema = z.object({
+  startSec: z.number().int().min(0),
+  endSec: z.number().int().min(CLIP_MIN_SEC),
+  reason: z.string().max(280),
+});
+export type ClipSuggestion = z.infer<typeof clipSuggestionSchema>;

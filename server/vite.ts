@@ -5,6 +5,7 @@ import viteConfig from "../vite.config";
 import fs from "fs";
 import path from "path";
 import { nanoid } from "nanoid";
+import { buildClipMetaTags } from "./clips";
 
 const viteLogger = createLogger();
 
@@ -48,6 +49,21 @@ export async function setupVite(server: Server, app: Express) {
         `src="/src/main.tsx"`,
         `src="/src/main.tsx?v=${nanoid()}"`,
       );
+      // Inject Open Graph meta for shareable clip pages so link previews on
+      // social platforms include the player thumbnail and title.
+      const clipMatch = url.match(/^\/clips\/([A-Za-z0-9_-]{6,16})(?:[/?#].*)?$/);
+      if (clipMatch) {
+        try {
+          const origin = `${req.protocol}://${req.get("host")}`;
+          const meta = await buildClipMetaTags(clipMatch[1], origin);
+          if (meta) {
+            template = template.replace("</head>", `    ${meta}\n  </head>`);
+          }
+        } catch (err) {
+          // Don't block the page if meta generation fails.
+          console.warn("clip OG meta inject failed:", err);
+        }
+      }
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {
