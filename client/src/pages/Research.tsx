@@ -7,7 +7,12 @@ import { Card } from "@/components/ui/card";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import { buildBibliography, formatCitation, indexOfUrl, type CitationStyle } from "@/lib/citations";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import {
@@ -260,6 +265,7 @@ function Results({
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [sidePickerOpen, setSidePickerOpen] = useState(false);
+  const [pdfBuilding, setPdfBuilding] = useState(false);
 
   const sectionFor = bundle.sources.filter((s) => s.stance === "for");
   const sectionAgainst = bundle.sources.filter((s) => s.stance === "against");
@@ -274,74 +280,357 @@ function Results({
     }
   };
 
-  const downloadPdf = async () => {
+  const downloadPdf = async (citationStyle: CitationStyle = "MLA") => {
     if (!bundle) return;
+    setPdfBuilding(true);
     try {
       const { jsPDF } = await import("jspdf");
       const doc = new jsPDF({ unit: "pt", format: "letter" });
-      const margin = 48;
+      const margin = 54;
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       const maxWidth = pageWidth - margin * 2;
-      let y = margin;
+      const contentTop = margin + 28;
+      const contentBottom = pageHeight - margin - 24;
 
-      const writeLine = (text: string, size: number, bold = false, gap = 4) => {
-        doc.setFont("helvetica", bold ? "bold" : "normal");
+      const BRAND = "Debate Prep";
+      const ACCENT: [number, number, number] = [217, 119, 6];
+      const PRIMARY: [number, number, number] = [30, 41, 59];
+      const MUTED: [number, number, number] = [100, 116, 139];
+      const RULE: [number, number, number] = [226, 232, 240];
+
+      const bib = buildBibliography(bundle);
+
+      const headerTitle = topic.length > 80 ? topic.slice(0, 77) + "…" : topic;
+      let y = contentTop;
+      let suppressChrome = true;
+
+      const drawChrome = (pageNum: number) => {
+        if (suppressChrome) return;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(...MUTED);
+        doc.text(BRAND, margin, margin - 6);
+        doc.text(headerTitle, pageWidth - margin, margin - 6, { align: "right" });
+        doc.setDrawColor(...RULE);
+        doc.setLineWidth(0.5);
+        doc.line(margin, margin, pageWidth - margin, margin);
+        doc.line(margin, pageHeight - margin, pageWidth - margin, pageHeight - margin);
+        doc.text(`Page ${pageNum}`, pageWidth - margin, pageHeight - margin + 14, { align: "right" });
+        doc.text(`${format} • ${side} • ${depth}`, margin, pageHeight - margin + 14);
+        doc.setTextColor(0, 0, 0);
+      };
+
+      const newPage = () => {
+        doc.addPage();
+        y = contentTop;
+        drawChrome(doc.getCurrentPageInfo().pageNumber);
+      };
+
+      const ensureSpace = (needed: number) => {
+        if (y + needed > contentBottom) newPage();
+      };
+
+      const writeLine = (text: string, opts: {
+        size?: number; bold?: boolean; italic?: boolean;
+        color?: [number, number, number]; gap?: number; indent?: number;
+      } = {}) => {
+        const size = opts.size ?? 10.5;
+        const gap = opts.gap ?? 4;
+        const indent = opts.indent ?? 0;
+        const style = opts.bold && opts.italic ? "bolditalic" : opts.bold ? "bold" : opts.italic ? "italic" : "normal";
+        doc.setFont("helvetica", style);
         doc.setFontSize(size);
-        const lines = doc.splitTextToSize(text, maxWidth);
+        if (opts.color) doc.setTextColor(...opts.color); else doc.setTextColor(40, 40, 40);
+        const lines = doc.splitTextToSize(text, maxWidth - indent);
         for (const ln of lines) {
-          if (y + size > pageHeight - margin) { doc.addPage(); y = margin; }
-          doc.text(ln, margin, y);
+          ensureSpace(size + gap);
+          doc.text(ln, margin + indent, y);
           y += size + gap;
         }
+        doc.setTextColor(0, 0, 0);
       };
-      const sectionHeader = (t: string) => { y += 10; writeLine(t, 14, true, 6); };
-      const para = (t: string) => writeLine(t, 11, false, 5);
 
-      writeLine(topic, 18, true, 8);
-      writeLine(`${format} • ${side} • ${depth}`, 10, false, 12);
+      const sectionHeader = (label: string, num?: number) => {
+        ensureSpace(40);
+        y += 8;
+        doc.setDrawColor(...ACCENT);
+        doc.setLineWidth(2);
+        doc.line(margin, y - 2, margin + 24, y - 2);
+        y += 6;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(15);
+        doc.setTextColor(...PRIMARY);
+        const title = num != null ? `${num}. ${label}` : label;
+        doc.text(title, margin, y + 4);
+        y += 22;
+        doc.setTextColor(0, 0, 0);
+      };
 
-      sectionHeader("Overview");
+      const subHeader = (label: string) => {
+        ensureSpace(22);
+        y += 4;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(...PRIMARY);
+        doc.text(label, margin, y);
+        y += 14;
+        doc.setTextColor(0, 0, 0);
+      };
+
+      const para = (text: string, indent = 0) => writeLine(text, { size: 10.5, gap: 4, indent });
+      const muted = (text: string, indent = 0) => writeLine(text, { size: 9.5, gap: 3, indent, color: MUTED });
+
+      const refTag = (url?: string) => {
+        const idx = indexOfUrl(bib, url);
+        return idx >= 0 ? ` [${idx + 1}]` : "";
+      };
+
+      // ---------- Cover page (page 1) ----------
+      const dateStr = new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+      doc.setFillColor(...PRIMARY);
+      doc.rect(0, 0, pageWidth, 180, "F");
+      doc.setFillColor(...ACCENT);
+      doc.rect(0, 180, pageWidth, 4, "F");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(255, 255, 255);
+      doc.text(BRAND.toUpperCase(), margin, 64);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(255, 255, 255);
+      doc.text("Research Packet", margin, 84);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(255, 255, 255);
+      doc.text(dateStr, pageWidth - margin, 64, { align: "right" });
+
+      doc.setTextColor(...PRIMARY);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(26);
+      const titleLines = doc.splitTextToSize(topic, maxWidth);
+      doc.text(titleLines, margin, 260);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      doc.setTextColor(...MUTED);
+      doc.text(`${format}  •  Side: ${side}  •  ${depth} brief`, margin, 260 + titleLines.length * 30);
+
+      // Cover meta block
+      const metaY = pageHeight - 220;
+      doc.setDrawColor(...RULE);
+      doc.setLineWidth(0.5);
+      doc.line(margin, metaY, pageWidth - margin, metaY);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(...MUTED);
+      doc.text("PREPARED", margin, metaY + 18);
+      doc.text("CITATION STYLE", margin + 180, metaY + 18);
+      doc.text("SOURCES", margin + 360, metaY + 18);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      doc.setTextColor(...PRIMARY);
+      doc.text(dateStr, margin, metaY + 36);
+      doc.text(citationStyle, margin + 180, metaY + 36);
+      doc.text(String(bib.length), margin + 360, metaY + 36);
+
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(9);
+      doc.setTextColor(...MUTED);
+      doc.text(
+        "Always verify cited links before round. This packet was AI-assisted.",
+        margin, pageHeight - margin
+      );
+
+      // ---------- Reserve TOC page (page 2) ----------
+      doc.addPage();
+      const tocPageNum = doc.getCurrentPageInfo().pageNumber;
+
+      // ---------- Content ----------
+      doc.addPage();
+      suppressChrome = false;
+      y = contentTop;
+      drawChrome(doc.getCurrentPageInfo().pageNumber);
+
+      const toc: { label: string; page: number }[] = [];
+      const startSection = (label: string, num: number) => {
+        ensureSpace(60);
+        toc.push({ label, page: doc.getCurrentPageInfo().pageNumber });
+        sectionHeader(label, num);
+      };
+
+      // 1. Overview
+      startSection("Overview", 1);
       para(bundle.overview);
 
-      sectionHeader("Key Facts");
-      bundle.keyFacts.forEach((f, i) => para(`${i + 1}. ${f.stat}  — ${f.source} (${f.url})`));
+      // 2. Key Facts
+      if (bundle.keyFacts.length) {
+        startSection("Key Facts & Statistics", 2);
+        bundle.keyFacts.forEach((f, i) => {
+          writeLine(`${i + 1}. ${f.stat}`, { size: 10.5, gap: 2 });
+          muted(`— ${f.source}${refTag(f.url)}`, 14);
+          y += 2;
+        });
+      }
 
-      sectionHeader("Sources");
-      (["for", "against", "neutral"] as const).forEach((stance) => {
-        const list = bundle.sources.filter((s) => s.stance === stance);
-        if (!list.length) return;
-        writeLine(stance.toUpperCase(), 12, true, 4);
-        list.forEach((s) => para(`• ${s.title} — ${s.publisher}${s.date ? `, ${s.date}` : ""}\n  ${s.summary}\n  ${s.url}`));
+      // 3. Source Library
+      if (bundle.sources.length) {
+        startSection("Source Library", 3);
+        const groups: { key: "for" | "against" | "neutral"; label: string }[] = [
+          { key: "for", label: "Supports the resolution (For)" },
+          { key: "against", label: "Opposes the resolution (Against)" },
+          { key: "neutral", label: "Background / Neutral" },
+        ];
+        for (const g of groups) {
+          const list = bundle.sources.filter((s) => s.stance === g.key);
+          if (!list.length) continue;
+          subHeader(g.label);
+          list.forEach((s) => {
+            writeLine(`${s.title}${refTag(s.url)}`, { size: 10.5, bold: true, gap: 2 });
+            muted(`${s.publisher}${s.date ? ` · ${s.date}` : ""}`);
+            para(s.summary);
+            y += 4;
+          });
+        }
+      }
+
+      // 4. Evidence Quotes
+      const hasEvidence = bundle.evidenceQuotes.for.length || bundle.evidenceQuotes.against.length;
+      if (hasEvidence) {
+        startSection("Evidence Quotes", 4);
+        if (bundle.evidenceQuotes.for.length) {
+          subHeader("For");
+          bundle.evidenceQuotes.for.forEach((q) => {
+            writeLine(`“${q.quote}”`, { size: 10.5, italic: true, gap: 2, indent: 12 });
+            muted(`— ${q.source}${refTag(q.url)}`, 12);
+            y += 3;
+          });
+        }
+        if (bundle.evidenceQuotes.against.length) {
+          subHeader("Against");
+          bundle.evidenceQuotes.against.forEach((q) => {
+            writeLine(`“${q.quote}”`, { size: 10.5, italic: true, gap: 2, indent: 12 });
+            muted(`— ${q.source}${refTag(q.url)}`, 12);
+            y += 3;
+          });
+        }
+      }
+
+      // 5. Case Outline
+      if (bundle.caseOutline.length) {
+        startSection(`Case Outline — ${side === "Both" ? "For" : side}`, 5);
+        bundle.caseOutline.forEach((c, i) => {
+          subHeader(`Contention ${i + 1}: ${c.title}`);
+          writeLine("Claim", { size: 9, bold: true, color: ACCENT, gap: 2 });
+          para(c.claim);
+          writeLine("Warrant", { size: 9, bold: true, color: ACCENT, gap: 2 });
+          para(c.warrant);
+          if (c.evidence.length) {
+            writeLine("Evidence", { size: 9, bold: true, color: ACCENT, gap: 2 });
+            c.evidence.forEach((e) => {
+              writeLine(`“${e.quote}”`, { size: 10, italic: true, gap: 2, indent: 12 });
+              muted(`— ${e.source}${refTag(e.url)}`, 12);
+            });
+          }
+          y += 6;
+        });
+      }
+
+      // 6. Anticipated Opposition
+      if (bundle.opposition.length) {
+        startSection("Anticipated Opposition", 6);
+        bundle.opposition.forEach((o, i) => {
+          writeLine(`${i + 1}. They'll argue: ${o.argument}`, { size: 10.5, bold: true, gap: 2 });
+          para(`Rebuttal: ${o.rebuttalHint}`, 14);
+          y += 4;
+        });
+      }
+
+      // 7. Key Terms
+      if (bundle.keyTerms.length) {
+        startSection("Key Terms & Stakeholders", 7);
+        bundle.keyTerms.forEach((t) => {
+          writeLine(`${t.term}  (${t.kind})`, { size: 10.5, bold: true, gap: 2 });
+          para(t.description);
+          y += 2;
+        });
+      }
+
+      // 8. Bibliography
+      if (bib.length) {
+        startSection(`Bibliography (${citationStyle})`, 8);
+        bib.forEach((entry, i) => {
+          const cite = formatCitation(entry, citationStyle);
+          const num = `[${i + 1}]`;
+          ensureSpace(28);
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(10);
+          doc.setTextColor(...PRIMARY);
+          doc.text(num, margin, y);
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(40, 40, 40);
+          const lines = doc.splitTextToSize(cite, maxWidth - 28);
+          for (const ln of lines) {
+            ensureSpace(12);
+            doc.text(ln, margin + 28, y);
+            y += 12;
+          }
+          y += 6;
+          doc.setTextColor(0, 0, 0);
+        });
+      }
+
+      // ---------- Render TOC on reserved page ----------
+      doc.setPage(tocPageNum);
+      suppressChrome = false;
+      drawChrome(tocPageNum);
+      let ty = contentTop;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(20);
+      doc.setTextColor(...PRIMARY);
+      doc.text("Table of Contents", margin, ty);
+      ty += 10;
+      doc.setDrawColor(...ACCENT);
+      doc.setLineWidth(2);
+      doc.line(margin, ty, margin + 40, ty);
+      ty += 28;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      toc.forEach((entry, i) => {
+        const num = `${i + 1}.`;
+        const label = entry.label;
+        const pageStr = String(entry.page);
+        doc.setTextColor(...PRIMARY);
+        doc.setFont("helvetica", "bold");
+        doc.text(num, margin, ty);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(40, 40, 40);
+        doc.text(label, margin + 22, ty);
+        const labelWidth = doc.getTextWidth(label);
+        const pageWidthText = doc.getTextWidth(pageStr);
+        const dotsStart = margin + 22 + labelWidth + 6;
+        const dotsEnd = pageWidth - margin - pageWidthText - 6;
+        if (dotsEnd > dotsStart) {
+          doc.setTextColor(...MUTED);
+          const dotCount = Math.floor((dotsEnd - dotsStart) / 4);
+          doc.text(".".repeat(Math.max(0, dotCount)), dotsStart, ty);
+        }
+        doc.setTextColor(...PRIMARY);
+        doc.text(pageStr, pageWidth - margin, ty, { align: "right" });
+        ty += 22;
       });
 
-      sectionHeader("Evidence — For");
-      bundle.evidenceQuotes.for.forEach((q) => para(`“${q.quote}” — ${q.source} (${q.url})`));
-      sectionHeader("Evidence — Against");
-      bundle.evidenceQuotes.against.forEach((q) => para(`“${q.quote}” — ${q.source} (${q.url})`));
-
-      sectionHeader("Case Outline");
-      bundle.caseOutline.forEach((c, i) => {
-        writeLine(`Contention ${i + 1}: ${c.title}`, 12, true, 4);
-        para(`Claim: ${c.claim}`);
-        para(`Warrant: ${c.warrant}`);
-        c.evidence.forEach((e) => para(`  • “${e.quote}” — ${e.source}`));
-      });
-
-      sectionHeader("Anticipated Opposition");
-      bundle.opposition.forEach((o, i) => {
-        para(`${i + 1}. ${o.argument}`);
-        para(`   Rebuttal: ${o.rebuttalHint}`);
-      });
-
-      sectionHeader("Key Terms");
-      bundle.keyTerms.forEach((t) => para(`• ${t.term} (${t.kind}): ${t.description}`));
-
+      // ---------- Save ----------
       const safe = topic.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 50) || "research";
-      doc.save(`${safe}.pdf`);
+      doc.save(`${safe}-${citationStyle.toLowerCase()}.pdf`);
     } catch (err) {
       console.error("pdf error", err);
       toast({ title: "PDF failed", description: "Couldn't build the PDF — try Copy all instead.", variant: "destructive" });
+    } finally {
+      setPdfBuilding(false);
     }
   };
 
@@ -387,9 +676,27 @@ function Results({
             <Button onClick={copyAll} variant="outline" size="sm" data-testid="button-copy-all">
               <Copy className="w-4 h-4 mr-1.5" /> Copy all
             </Button>
-            <Button onClick={downloadPdf} variant="outline" size="sm" data-testid="button-download-pdf">
-              <Download className="w-4 h-4 mr-1.5" /> PDF
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={pdfBuilding} data-testid="button-download-pdf">
+                  {pdfBuilding ? (
+                    <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Building…</>
+                  ) : (
+                    <><Download className="w-4 h-4 mr-1.5" /> PDF</>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Citation style</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => downloadPdf("MLA")} data-testid="button-download-pdf-mla">
+                  <FileText className="w-4 h-4 mr-2" /> Download (MLA)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => downloadPdf("APA")} data-testid="button-download-pdf-apa">
+                  <FileText className="w-4 h-4 mr-2" /> Download (APA)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button onClick={() => launchPractice()} size="sm" className="bg-accent hover:bg-accent/90" data-testid="button-launch-practice">
               <Mic className="w-4 h-4 mr-1.5" /> Start practice round
             </Button>
