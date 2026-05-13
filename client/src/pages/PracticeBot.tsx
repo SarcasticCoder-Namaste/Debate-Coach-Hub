@@ -14,7 +14,7 @@ import { Navigation } from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { History as HistoryIcon, CheckCircle2, LogIn } from "lucide-react";
+import { History as HistoryIcon, CheckCircle2 } from "lucide-react";
 import {
   Select,
   SelectContent,

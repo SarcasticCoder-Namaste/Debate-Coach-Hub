@@ -19,6 +19,10 @@ import Coaches from "@/pages/Coaches";
 import AdminLeads from "@/pages/AdminLeads";
 import Drills from "@/pages/Drills";
 import DrillRunner from "@/pages/DrillRunner";
+import Teams from "@/pages/Teams";
+import TeamDetail from "@/pages/TeamDetail";
+import TeamJoin from "@/pages/TeamJoin";
+import TeamSession from "@/pages/TeamSession";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -40,6 +44,10 @@ function Router() {
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/history" component={History} />
       <Route path="/coaches" component={Coaches} />
+      <Route path="/teams" component={Teams} />
+      <Route path="/teams/join/:code" component={TeamJoin} />
+      <Route path="/teams/:id/sessions/:roundId" component={TeamSession} />
+      <Route path="/teams/:id" component={TeamDetail} />
       <Route path="/admin/leads" component={AdminLeads} />
       <Route component={NotFound} />
     </Switch>

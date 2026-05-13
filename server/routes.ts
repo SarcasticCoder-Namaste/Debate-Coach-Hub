@@ -18,6 +18,7 @@ import { sendAdminLeadAlert, sendBookingConfirmation } from "./notify";
 import { seedCoaches } from "./seed";
 import { registerSessionRoutes } from "./sessions";
 import { registerDrillRoutes } from "./drills";
+import { registerTeamRoutes } from "./teams";
 
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "demo-admin";
 
@@ -255,6 +256,7 @@ export async function registerRoutes(
   registerBillingRoutes(app);
   registerResearchRoutes(app);
   registerDrillRoutes(app);
+  registerTeamRoutes(app);
 
   app.post("/api/assistant/chat", async (req, res) => {
     const ip = (req.ip || req.socket.remoteAddress || "unknown").toString();

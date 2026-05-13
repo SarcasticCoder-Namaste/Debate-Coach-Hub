@@ -12,6 +12,12 @@ import {
   savedTopics,
   coachReferrals,
   judgeSessions,
+  teams,
+  teamMembers,
+  teamInvites,
+  teamAssignments,
+  assignmentCompletions,
+  sessionComments,
   type InsertInquiry,
   type Inquiry,
   type InsertPracticeShare,
@@ -38,9 +44,17 @@ import {
   type CoachReferral,
   type InsertJudgeSession,
   type JudgeSession,
+  type Team,
+  type TeamMember,
+  type TeamInvite,
+  type TeamAssignment,
+  type AssignmentCompletion,
+  type SessionComment,
+  type CreateAssignment,
+  type UserRole,
 } from "@shared/schema";
 import { db } from "./db";
-import { and, asc, desc, eq, gt, isNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 
 export interface IStorage {
   createInquiry(inquiry: InsertInquiry): Promise<Inquiry>;
@@ -112,6 +126,32 @@ export interface IStorage {
 
   createJudgeSession(input: InsertJudgeSession): Promise<JudgeSession>;
   listJudgeSessions(userEmail: string): Promise<JudgeSession[]>;
+
+  setUserRole(userId: number, role: UserRole): Promise<User | undefined>;
+  createTeam(ownerId: number, name: string, joinCode: string): Promise<Team>;
+  listTeamsForUser(userId: number): Promise<Array<Team & { memberRole: string }>>;
+  getTeam(teamId: number): Promise<Team | undefined>;
+  getTeamByJoinCode(code: string): Promise<Team | undefined>;
+  isTeamCoach(teamId: number, userId: number): Promise<boolean>;
+  isTeamMember(teamId: number, userId: number): Promise<boolean>;
+  addTeamMember(teamId: number, userId: number, role: "coach" | "student"): Promise<TeamMember>;
+  removeTeamMember(teamId: number, userId: number): Promise<void>;
+  listTeamMembers(teamId: number): Promise<Array<TeamMember & { user: Pick<User, "id" | "email" | "name"> }>>;
+  listTeamInvites(teamId: number): Promise<TeamInvite[]>;
+  createTeamInvite(teamId: number, email: string, invitedBy: number): Promise<TeamInvite>;
+
+  createAssignment(teamId: number, createdBy: number, data: CreateAssignment): Promise<TeamAssignment>;
+  listAssignmentsForTeam(teamId: number): Promise<TeamAssignment[]>;
+  listAssignmentsForUser(userId: number): Promise<Array<TeamAssignment & { teamName: string; completedAt: Date | null }>>;
+  markAssignmentComplete(assignmentId: number, userId: number, roundId: number | null): Promise<AssignmentCompletion>;
+  listAssignmentCompletions(assignmentId: number): Promise<AssignmentCompletion[]>;
+  getAssignment(id: number): Promise<TeamAssignment | undefined>;
+
+  listRoundsForUser(userId: number, limit?: number): Promise<PracticeRound[]>;
+  getRoundById(id: number): Promise<PracticeRound | undefined>;
+
+  createSessionComment(roundId: number, authorId: number, body: string): Promise<SessionComment>;
+  listSessionComments(roundId: number): Promise<Array<SessionComment & { authorName: string | null; authorEmail: string }>>;
 }
 
 function nextPeriodEnd(from: Date, interval: string): Date {
@@ -544,6 +584,284 @@ export class DatabaseStorage implements IStorage {
       .where(eq(judgeSessions.userEmail, userEmail))
       .orderBy(desc(judgeSessions.createdAt))
       .limit(50);
+  }
+
+  async setUserRole(userId: number, role: UserRole): Promise<User | undefined> {
+    const [u] = await db.update(users).set({ role }).where(eq(users.id, userId)).returning();
+    return u;
+  }
+
+  async createTeam(ownerId: number, name: string, joinCode: string): Promise<Team> {
+    const [t] = await db.insert(teams).values({ name, ownerId, joinCode }).returning();
+    await db.insert(teamMembers).values({ teamId: t.id, userId: ownerId, role: "coach" });
+    return t;
+  }
+
+  async listTeamsForUser(
+    userId: number,
+  ): Promise<Array<Team & { memberRole: string }>> {
+    const rows = await db
+      .select({
+        id: teams.id,
+        name: teams.name,
+        ownerId: teams.ownerId,
+        joinCode: teams.joinCode,
+        createdAt: teams.createdAt,
+        memberRole: teamMembers.role,
+      })
+      .from(teamMembers)
+      .innerJoin(teams, eq(teams.id, teamMembers.teamId))
+      .where(eq(teamMembers.userId, userId))
+      .orderBy(desc(teams.createdAt));
+    return rows;
+  }
+
+  async getTeam(teamId: number): Promise<Team | undefined> {
+    const [t] = await db.select().from(teams).where(eq(teams.id, teamId));
+    return t;
+  }
+
+  async getTeamByJoinCode(code: string): Promise<Team | undefined> {
+    const [t] = await db.select().from(teams).where(eq(teams.joinCode, code));
+    return t;
+  }
+
+  async isTeamCoach(teamId: number, userId: number): Promise<boolean> {
+    const [m] = await db
+      .select()
+      .from(teamMembers)
+      .where(
+        and(
+          eq(teamMembers.teamId, teamId),
+          eq(teamMembers.userId, userId),
+          eq(teamMembers.role, "coach"),
+        ),
+      );
+    return !!m;
+  }
+
+  async isTeamMember(teamId: number, userId: number): Promise<boolean> {
+    const [m] = await db
+      .select()
+      .from(teamMembers)
+      .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
+    return !!m;
+  }
+
+  async addTeamMember(
+    teamId: number,
+    userId: number,
+    role: "coach" | "student",
+  ): Promise<TeamMember> {
+    const existing = await db
+      .select()
+      .from(teamMembers)
+      .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
+    if (existing[0]) return existing[0];
+    const [m] = await db
+      .insert(teamMembers)
+      .values({ teamId, userId, role })
+      .returning();
+    return m;
+  }
+
+  async removeTeamMember(teamId: number, userId: number): Promise<void> {
+    await db
+      .delete(teamMembers)
+      .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
+  }
+
+  async listTeamMembers(
+    teamId: number,
+  ): Promise<Array<TeamMember & { user: Pick<User, "id" | "email" | "name"> }>> {
+    const rows = await db
+      .select({
+        id: teamMembers.id,
+        teamId: teamMembers.teamId,
+        userId: teamMembers.userId,
+        role: teamMembers.role,
+        joinedAt: teamMembers.joinedAt,
+        userId2: users.id,
+        email: users.email,
+        name: users.name,
+      })
+      .from(teamMembers)
+      .innerJoin(users, eq(users.id, teamMembers.userId))
+      .where(eq(teamMembers.teamId, teamId))
+      .orderBy(asc(teamMembers.role), asc(users.email));
+    return rows.map((r) => ({
+      id: r.id,
+      teamId: r.teamId,
+      userId: r.userId,
+      role: r.role,
+      joinedAt: r.joinedAt,
+      user: { id: r.userId2, email: r.email, name: r.name },
+    }));
+  }
+
+  async listTeamInvites(teamId: number): Promise<TeamInvite[]> {
+    return db
+      .select()
+      .from(teamInvites)
+      .where(eq(teamInvites.teamId, teamId))
+      .orderBy(desc(teamInvites.createdAt));
+  }
+
+  async createTeamInvite(
+    teamId: number,
+    email: string,
+    invitedBy: number,
+  ): Promise<TeamInvite> {
+    const [inv] = await db
+      .insert(teamInvites)
+      .values({ teamId, email: email.toLowerCase(), invitedBy })
+      .returning();
+    return inv;
+  }
+
+  async createAssignment(
+    teamId: number,
+    createdBy: number,
+    data: CreateAssignment,
+  ): Promise<TeamAssignment> {
+    const [a] = await db
+      .insert(teamAssignments)
+      .values({
+        teamId,
+        createdBy,
+        kind: data.kind ?? "topic",
+        title: data.title,
+        topic: data.topic ?? null,
+        format: data.format ?? null,
+        side: data.side ?? null,
+        description: data.description ?? null,
+        dueDate: data.dueDate ? new Date(data.dueDate) : null,
+        targetUserIds: data.targetUserIds && data.targetUserIds.length > 0 ? data.targetUserIds : null,
+      })
+      .returning();
+    return a;
+  }
+
+  async getAssignment(id: number): Promise<TeamAssignment | undefined> {
+    const [a] = await db.select().from(teamAssignments).where(eq(teamAssignments.id, id));
+    return a;
+  }
+
+  async listAssignmentsForTeam(teamId: number): Promise<TeamAssignment[]> {
+    return db
+      .select()
+      .from(teamAssignments)
+      .where(eq(teamAssignments.teamId, teamId))
+      .orderBy(desc(teamAssignments.createdAt));
+  }
+
+  async listAssignmentsForUser(
+    userId: number,
+  ): Promise<Array<TeamAssignment & { teamName: string; completedAt: Date | null }>> {
+    const memberRows = await db
+      .select({ teamId: teamMembers.teamId })
+      .from(teamMembers)
+      .where(eq(teamMembers.userId, userId));
+    const teamIds = memberRows.map((r) => r.teamId);
+    if (teamIds.length === 0) return [];
+    const rows = await db
+      .select({
+        a: teamAssignments,
+        teamName: teams.name,
+        completedAt: assignmentCompletions.completedAt,
+      })
+      .from(teamAssignments)
+      .innerJoin(teams, eq(teams.id, teamAssignments.teamId))
+      .leftJoin(
+        assignmentCompletions,
+        and(
+          eq(assignmentCompletions.assignmentId, teamAssignments.id),
+          eq(assignmentCompletions.userId, userId),
+        ),
+      )
+      .where(inArray(teamAssignments.teamId, teamIds))
+      .orderBy(desc(teamAssignments.createdAt));
+    return rows
+      .filter((r) => {
+        const t = r.a.targetUserIds;
+        return !t || t.length === 0 || t.includes(userId);
+      })
+      .map((r) => ({ ...r.a, teamName: r.teamName, completedAt: r.completedAt }));
+  }
+
+  async markAssignmentComplete(
+    assignmentId: number,
+    userId: number,
+    roundId: number | null,
+  ): Promise<AssignmentCompletion> {
+    const [existing] = await db
+      .select()
+      .from(assignmentCompletions)
+      .where(
+        and(
+          eq(assignmentCompletions.assignmentId, assignmentId),
+          eq(assignmentCompletions.userId, userId),
+        ),
+      );
+    if (existing) return existing;
+    const [c] = await db
+      .insert(assignmentCompletions)
+      .values({ assignmentId, userId, roundId })
+      .returning();
+    return c;
+  }
+
+  async listAssignmentCompletions(assignmentId: number): Promise<AssignmentCompletion[]> {
+    return db
+      .select()
+      .from(assignmentCompletions)
+      .where(eq(assignmentCompletions.assignmentId, assignmentId));
+  }
+
+  async listRoundsForUser(userId: number, limit = 50): Promise<PracticeRound[]> {
+    return db
+      .select()
+      .from(practiceRounds)
+      .where(eq(practiceRounds.userId, userId))
+      .orderBy(desc(practiceRounds.createdAt))
+      .limit(limit);
+  }
+
+  async getRoundById(id: number): Promise<PracticeRound | undefined> {
+    const [r] = await db.select().from(practiceRounds).where(eq(practiceRounds.id, id));
+    return r;
+  }
+
+  async createSessionComment(
+    roundId: number,
+    authorId: number,
+    body: string,
+  ): Promise<SessionComment> {
+    const [c] = await db
+      .insert(sessionComments)
+      .values({ roundId, authorId, body })
+      .returning();
+    return c;
+  }
+
+  async listSessionComments(
+    roundId: number,
+  ): Promise<Array<SessionComment & { authorName: string | null; authorEmail: string }>> {
+    const rows = await db
+      .select({
+        id: sessionComments.id,
+        roundId: sessionComments.roundId,
+        authorId: sessionComments.authorId,
+        body: sessionComments.body,
+        createdAt: sessionComments.createdAt,
+        authorName: users.name,
+        authorEmail: users.email,
+      })
+      .from(sessionComments)
+      .innerJoin(users, eq(users.id, sessionComments.authorId))
+      .where(eq(sessionComments.roundId, roundId))
+      .orderBy(asc(sessionComments.createdAt));
+    return rows;
   }
 }
 

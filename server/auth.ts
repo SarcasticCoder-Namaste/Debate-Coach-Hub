@@ -32,6 +32,7 @@ function publicUser(u: User) {
     id: u.id,
     email: u.email,
     name: u.name,
+    role: u.role,
     emailCommentNotifications: u.emailCommentNotifications,
   };
 }
@@ -90,6 +91,7 @@ export function registerAuthRoutes(app: Express) {
         email,
         name: parsed.data.name ?? null,
         passwordHash: hashPassword(parsed.data.password),
+        role: parsed.data.role ?? "student",
       });
       req.session.userId = user.id;
       res.status(201).json({ user: publicUser(user) });

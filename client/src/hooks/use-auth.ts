@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
-export type AuthUser = { id: number; email: string; name: string | null };
+export type AuthUser = { id: number; email: string; name: string | null; role?: "student" | "coach" };
 
 export function useAuth() {
   const { data, isLoading } = useQuery<{ user: AuthUser | null }>({

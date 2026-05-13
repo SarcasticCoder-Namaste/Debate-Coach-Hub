@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Menu, X, GraduationCap, Sun, Moon, Monitor, LogIn, LogOut, Mic, Library, History as HistoryIcon, Tag, Crown, Search, LayoutDashboard, CalendarDays, Trophy, Zap } from "lucide-react";
+import { Menu, X, GraduationCap, Sun, Moon, Monitor, LogIn, LogOut, Mic, Library, History as HistoryIcon, Tag, Crown, Search, LayoutDashboard, CalendarDays, Trophy, Zap, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/ThemeProvider";
 import { Link, useLocation } from "wouter";
@@ -151,6 +151,20 @@ export function Navigation() {
           >
             <Mic className="w-3.5 h-3.5" /> Practice
           </Link>
+
+          {signedIn && (
+            <Link
+              href="/teams"
+              data-testid="nav-link-teams"
+              className={`inline-flex items-center gap-1.5 text-sm font-semibold transition-colors ${
+                isDarkHero
+                  ? "text-white/90 hover:text-white"
+                  : "text-foreground/80 hover:text-foreground"
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" /> Teams
+            </Link>
+          )}
 
           {signedIn && (
             <Link

@@ -18,11 +18,15 @@ export const insertInquirySchema = createInsertSchema(inquiries).omit({
 export type Inquiry = typeof inquiries.$inferSelect;
 export type InsertInquiry = z.infer<typeof insertInquirySchema>;
 
+export const USER_ROLES = ["student", "coach"] as const;
+export type UserRole = (typeof USER_ROLES)[number];
+
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   email: text("email").notNull().unique(),
   name: text("name"),
   passwordHash: text("password_hash").notNull(),
+  role: text("role").notNull().default("student"),
   emailCommentNotifications: boolean("email_comment_notifications").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -44,6 +48,7 @@ export const signupSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
   name: z.string().min(1).optional(),
+  role: z.enum(USER_ROLES).optional(),
 });
 
 export const signinSchema = z.object({
@@ -702,3 +707,130 @@ export const coachReferralRequestSchema = z.object({
   note: z.string().trim().max(1000).optional(),
 });
 export type CoachReferralRequest = z.infer<typeof coachReferralRequestSchema>;
+
+/* ------------------------------------------------------------------ */
+/*  Teams & Classroom Mode                                            */
+/* ------------------------------------------------------------------ */
+
+export const teams = pgTable("teams", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  ownerId: integer("owner_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  joinCode: text("join_code").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertTeamSchema = createInsertSchema(teams).omit({
+  id: true,
+  createdAt: true,
+  joinCode: true,
+  ownerId: true,
+}).extend({
+  name: z.string().trim().min(1, "Team name is required").max(120),
+});
+export type Team = typeof teams.$inferSelect;
+export type InsertTeam = z.infer<typeof insertTeamSchema>;
+
+export const TEAM_MEMBER_ROLES = ["coach", "student"] as const;
+export type TeamMemberRole = (typeof TEAM_MEMBER_ROLES)[number];
+
+export const teamMembers = pgTable("team_members", {
+  id: serial("id").primaryKey(),
+  teamId: integer("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  role: text("role").notNull().default("student"),
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+});
+
+export type TeamMember = typeof teamMembers.$inferSelect;
+
+export const teamInvites = pgTable("team_invites", {
+  id: serial("id").primaryKey(),
+  teamId: integer("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  invitedBy: integer("invited_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const inviteTeamSchema = z.object({
+  emails: z.array(z.string().email()).min(1).max(50),
+});
+export type TeamInvite = typeof teamInvites.$inferSelect;
+
+export const ASSIGNMENT_KINDS = ["topic", "drill"] as const;
+export type AssignmentKind = (typeof ASSIGNMENT_KINDS)[number];
+
+export const teamAssignments = pgTable("team_assignments", {
+  id: serial("id").primaryKey(),
+  teamId: integer("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull().default("topic"),
+  title: text("title").notNull(),
+  topic: text("topic"),
+  format: text("format"),
+  side: text("side"),
+  description: text("description"),
+  dueDate: timestamp("due_date"),
+  targetUserIds: integer("target_user_ids").array(),
+  createdBy: integer("created_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const createAssignmentSchema = z.object({
+  kind: z.enum(ASSIGNMENT_KINDS).default("topic"),
+  title: z.string().trim().min(1).max(200),
+  topic: z.string().trim().max(500).optional().nullable(),
+  format: z.string().trim().max(40).optional().nullable(),
+  side: z.string().trim().max(20).optional().nullable(),
+  description: z.string().trim().max(2000).optional().nullable(),
+  dueDate: z.string().datetime().optional().nullable(),
+  targetUserIds: z.array(z.number().int()).optional().nullable(),
+});
+export type CreateAssignment = z.infer<typeof createAssignmentSchema>;
+export type TeamAssignment = typeof teamAssignments.$inferSelect;
+
+export const assignmentCompletions = pgTable("assignment_completions", {
+  id: serial("id").primaryKey(),
+  assignmentId: integer("assignment_id")
+    .notNull()
+    .references(() => teamAssignments.id, { onDelete: "cascade" }),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  roundId: integer("round_id").references(() => practiceRounds.id, {
+    onDelete: "set null",
+  }),
+  completedAt: timestamp("completed_at").defaultNow().notNull(),
+});
+
+export type AssignmentCompletion = typeof assignmentCompletions.$inferSelect;
+
+export const sessionComments = pgTable("session_comments", {
+  id: serial("id").primaryKey(),
+  roundId: integer("round_id")
+    .notNull()
+    .references(() => practiceRounds.id, { onDelete: "cascade" }),
+  authorId: integer("author_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const createSessionCommentSchema = z.object({
+  body: z.string().trim().min(1, "Comment is required").max(2000),
+});
+export type SessionComment = typeof sessionComments.$inferSelect;
