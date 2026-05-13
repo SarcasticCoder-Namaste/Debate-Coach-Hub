@@ -9,7 +9,8 @@ import {
   Users, Trophy, Mic, Quote, CheckCircle2, Calendar, ArrowRight,
   GraduationCap, BookOpen, FileText, MessageSquare, Award, Star,
   ShieldCheck, Clock3, ArrowUp, Search, Target, Zap,
-  Megaphone, Gavel, Scale, CalendarDays, MapPin
+  Megaphone, Gavel, Scale, CalendarDays, MapPin,
+  Mail, Send, Sparkles, Heart, Lightbulb, Compass, MessageCircle, X
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -75,6 +76,152 @@ const staggerChild = {
   hidden: { opacity: 0, y: 30 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } },
 };
+
+/* ------------------------------------------------------------------ */
+/*  Newsletter Form                                                    */
+/* ------------------------------------------------------------------ */
+function NewsletterForm() {
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState<"idle" | "success">("idle");
+
+  return (
+    <>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (email) {
+            setStatus("success");
+            setEmail("");
+          }
+        }}
+        className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto"
+      >
+        <input
+          type="email"
+          name="newsletter-email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@email.com"
+          aria-label="Email address"
+          data-testid="input-newsletter-email"
+          className="flex-1 px-4 py-3 rounded-full bg-white/10 backdrop-blur border border-white/20 text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-accent transition-all"
+        />
+        <button
+          type="submit"
+          data-testid="button-newsletter-submit"
+          className="px-6 py-3 rounded-full bg-accent text-white font-semibold hover:bg-accent/90 transition-all hover:scale-105 flex items-center justify-center gap-2 shadow-lg"
+        >
+          Subscribe <Send className="w-4 h-4" />
+        </button>
+      </form>
+      <p
+        role="status"
+        aria-live="polite"
+        data-testid="text-newsletter-status"
+        className={`mt-4 text-sm font-medium transition-opacity ${
+          status === "success" ? "text-accent opacity-100" : "opacity-0 h-0"
+        }`}
+      >
+        {status === "success" ? "Thanks! Check your inbox to confirm." : ""}
+      </p>
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Floating Chat CTA                                                  */
+/* ------------------------------------------------------------------ */
+function FloatingChatCTA({ onCta }: { onCta: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [show, setShow] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popupCtaRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setShow(true), 4000);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    popupCtaRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  if (!show) return null;
+
+  return (
+    <div className="fixed bottom-6 left-6 z-50">
+      {open && (
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.9 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 20, scale: 0.9 }}
+          transition={{ duration: 0.25 }}
+          className="absolute bottom-16 left-0 w-72 bg-card border border-border rounded-2xl shadow-2xl p-5"
+          data-testid="chat-popup"
+          role="dialog"
+          aria-modal="false"
+          aria-label="Quick contact"
+        >
+          <button
+            onClick={() => setOpen(false)}
+            className="absolute top-3 right-3 text-muted-foreground hover:text-foreground"
+            aria-label="Close"
+            data-testid="button-close-chat"
+          >
+            <X className="w-4 h-4" />
+          </button>
+          <div className="flex items-start gap-3 mb-3">
+            <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center flex-shrink-0">
+              <GraduationCap className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-bold text-primary text-sm">Hi there! 👋</p>
+              <p className="text-xs text-muted-foreground">Coach available now</p>
+            </div>
+          </div>
+          <p className="text-sm text-foreground/80 mb-4">
+            Have a quick question about coaching or want to book a free 20-minute consult?
+          </p>
+          <button
+            ref={popupCtaRef}
+            onClick={() => { onCta(); setOpen(false); triggerRef.current?.focus(); }}
+            data-testid="button-chat-cta"
+            className="w-full px-4 py-2.5 rounded-full bg-accent text-white text-sm font-semibold hover:bg-accent/90 transition-all"
+          >
+            Book Free Consult
+          </button>
+        </motion.div>
+      )}
+      <motion.button
+        ref={triggerRef}
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        whileHover={{ scale: 1.08 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={() => setOpen((o) => !o)}
+        data-testid="button-floating-chat"
+        className="w-14 h-14 rounded-full bg-primary text-white shadow-2xl flex items-center justify-center hover:bg-primary/90 transition-colors relative"
+        aria-label={open ? "Close chat" : "Open chat"}
+        aria-expanded={open}
+      >
+        {open ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
+        {!open && (
+          <span className="absolute -top-1 -right-1 w-3 h-3 bg-accent rounded-full ring-2 ring-background animate-pulse" />
+        )}
+      </motion.button>
+    </div>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /*  Typewriter Effect                                                  */
@@ -743,6 +890,49 @@ export default function Home() {
         </motion.div>
       </Section>
 
+      {/* ===================== COACHING PHILOSOPHY ===================== */}
+      <Section id="philosophy" className="py-24" bg="bg-background">
+        <div className="text-center mb-16">
+          <motion.span variants={fadeInUp} custom={0} className="text-accent font-bold tracking-wider uppercase text-sm">
+            Our Philosophy
+          </motion.span>
+          <motion.h2 variants={fadeInUp} custom={0.1} className="text-3xl md:text-5xl font-display font-bold text-primary mt-2 mb-4">
+            Built On Four Core Principles
+          </motion.h2>
+          <motion.p variants={fadeInUp} custom={0.15} className="text-muted-foreground max-w-2xl mx-auto">
+            Every session is anchored in values that turn good debaters into champions.
+          </motion.p>
+        </div>
+
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-50px" }}
+          className="grid md:grid-cols-2 lg:grid-cols-4 gap-6"
+        >
+          {[
+            { icon: Lightbulb, title: "Critical Thinking", desc: "Train students to question assumptions and build arguments from first principles." },
+            { icon: Heart, title: "Confidence", desc: "Develop a poised, persuasive presence that carries beyond the debate room." },
+            { icon: Compass, title: "Strategy", desc: "Master frameworks, flow, and game theory for any topic or opponent." },
+            { icon: Sparkles, title: "Authenticity", desc: "Find your unique voice instead of mimicking generic debate styles." },
+          ].map((p) => (
+            <motion.div
+              key={p.title}
+              variants={staggerChild}
+              whileHover={{ y: -6 }}
+              className="p-8 rounded-2xl bg-gradient-to-br from-primary/5 to-accent/5 border border-border text-center hover:shadow-xl transition-shadow"
+            >
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-primary text-white flex items-center justify-center mb-5 shadow-lg">
+                <p.icon className="w-7 h-7" />
+              </div>
+              <h3 className="text-xl font-bold text-primary mb-2">{p.title}</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed">{p.desc}</p>
+            </motion.div>
+          ))}
+        </motion.div>
+      </Section>
+
       {/* ===================== FAQ ===================== */}
       <Section id="faq" className="py-24" bg="bg-muted/40">
         <div className="max-w-3xl mx-auto text-center mb-10">
@@ -824,6 +1014,33 @@ export default function Home() {
         </div>
       </Section>
 
+      {/* ===================== NEWSLETTER ===================== */}
+      <section className="py-20 bg-primary relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute -top-24 -left-24 w-96 h-96 bg-accent/20 rounded-full blur-3xl" />
+          <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-white/10 rounded-full blur-3xl" />
+        </div>
+        <div className="container mx-auto px-4 relative z-10">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7 }}
+            className="max-w-2xl mx-auto text-center text-white"
+          >
+            <Mail className="w-12 h-12 mx-auto mb-4 text-accent" />
+            <h2 className="text-3xl md:text-4xl font-display font-bold mb-3">
+              Weekly Debate Tips, Free
+            </h2>
+            <p className="text-white/80 mb-8">
+              Join 2,000+ debaters getting strategy breakdowns, topic analysis, and tournament prep in their inbox every Sunday.
+            </p>
+            <NewsletterForm />
+            <p className="text-xs text-white/50 mt-4">No spam. Unsubscribe anytime.</p>
+          </motion.div>
+        </div>
+      </section>
+
       {/* ===================== FOOTER ===================== */}
       <footer className="bg-primary text-white py-12 border-t border-white/10 relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none shimmer opacity-5" />
@@ -851,6 +1068,9 @@ export default function Home() {
           </p>
         </div>
       </footer>
+
+      {/* Floating Chat Bubble */}
+      <FloatingChatCTA onCta={scrollToContact} />
 
       {/* Back to top */}
       {showTopBtn && (

@@ -52,13 +52,14 @@ export function Navigation() {
 
         {/* Desktop Links */}
         <div className="hidden md:flex items-center gap-6">
-          {["About", "Services", "How It Works", "Testimonials", "FAQ"].map(
+          {["About", "Services", "Formats", "Tournaments", "How It Works", "Testimonials", "FAQ"].map(
             (item) => (
               <button
                 key={item}
                 onClick={() =>
                   scrollToSection(item.toLowerCase().replace(/ /g, "-"))
                 }
+                data-testid={`nav-link-${item.toLowerCase().replace(/ /g, "-")}`}
                 className={`text-sm font-medium hover:text-accent transition-colors ${
                   isDarkHero
                     ? "text-white/90 hover:text-white"
