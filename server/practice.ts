@@ -51,6 +51,7 @@ function buildSystemPrompt(
   format: string,
   lang: LanguageCode,
   packet?: PacketContext | null,
+  judgeMode?: { phase: SpeechPhase; index: number; total: number; persona: JudgePersona } | null,
 ) {
   const opposing = side === "Aff" ? "Negative" : "Affirmative";
   const packetBlock = packet
@@ -73,6 +74,42 @@ ${packet.excerpt}
 """`
     : "";
 
+  if (judgeMode) {
+    const { phase, index, total } = judgeMode;
+    const isOpening = index === 0;
+    const isLast = index === total - 1;
+    const remaining = total - index - 1;
+    const phaseGuide = phase.label.toLowerCase().includes("rebuttal") ||
+      phase.label.toLowerCase().includes("nr") ||
+      phase.label.toLowerCase().includes("ar")
+      ? "This is a REBUTTAL — directly attack the opposing arguments on the flow, extend your strongest claims, and start weighing impacts. Do not introduce new offense beyond responses."
+      : phase.label.toLowerCase().includes("summary")
+      ? "This is a SUMMARY — collapse the round to 1-2 voting issues, weigh impacts (probability, magnitude, scope, timeframe), and frame why your side wins."
+      : phase.label.toLowerCase().includes("final") || phase.label.toLowerCase().includes("reply")
+      ? "This is the FINAL FOCUS / REPLY — only weigh the voting issues already in the round; no new arguments. Crystallize why your side wins on impact calculus."
+      : phase.label.toLowerCase().includes("crystall")
+      ? "This is a CRYSTALLIZATION — synthesize the chamber's debate, identify the central clash, and persuade why your side wins."
+      : "This is a CONSTRUCTIVE — lay out a clean case: framework / standard, then 2-3 contentions with claim, warrant, and impact.";
+
+    return `You are a competitive debate ${opposing} debater in a live JUDGED round.
+
+Resolution: "${topic}"
+Format: ${FORMAT_GUIDES[format] ?? format}
+You debate: ${opposing} (the student is ${side === "Aff" ? "Affirmative" : "Negative"})
+Speech you are now delivering: ${phase.label} (speech ${index + 1} of ${total}, ~${phase.minutes} min)
+${isOpening ? "This is the very first speech of the round." : ""}${isLast ? "This is the FINAL speech of the round — collapse and crystallize." : `${remaining} speech${remaining === 1 ? "" : "es"} remain after yours.`}${packetBlock}
+
+${phaseGuide}
+
+Language requirement: ${languageInstruction(lang)}
+
+Output rules:
+- Speak in-round, first person, no headings, no bullet lists. About ${Math.max(150, phase.minutes * 110)}-${phase.minutes * 170} words.
+- Reference the prior speeches by what was actually said. Signpost ("Off the top of their case…", "Onto our second contention…").
+- Be aggressive but professional — this is judged.${packet ? "\n- When relevant, cite the shared packet by name." : ""}
+- Do NOT break character, do NOT add coaching notes, do NOT predict the judge's decision. Just deliver the speech.`;
+  }
+
   return `You are an experienced competitive debate coach and a sharp ${opposing} opponent.
 
 Resolution / Topic: "${topic}"
@@ -89,6 +126,17 @@ Your job each turn:
 
 Stay in character as the opponent. Do NOT add coaching tips inside this response — feedback is delivered separately.`;
 }
+
+const PERSONA_GUIDE: Record<JudgePersona, string> = {
+  Lay:
+    "Decide as a LAY judge: a smart adult with no debate background. Reward clear, persuasive, well-organized argumentation; penalize jargon, speed, and unexplained tech. Speaker points reflect persuasive presence and clarity to a layperson.",
+  Flow:
+    "Decide as a FLOW judge: vote off the line-by-line. Track dropped arguments, extensions, and clean weighing on the flow. Tech > truth; collapse to the cleanest path to ballot. Speaker points reward clean extensions, signposting, and tight rebuttals.",
+  "Tabula Rasa":
+    "Decide as a TABULA RASA judge: enter with no presumptions. Vote ONLY on what is in the round (framework wins first, then offense under it). Don't intervene with outside knowledge. Speaker points reward technical execution and theoretical clarity.",
+  "Policy-maker":
+    "Decide as a POLICY-MAKER judge: weigh the resolution as a real policy choice. Compare the world of the Aff plan vs the Neg counter-plan / status quo on probability, magnitude, timeframe, and reversibility. Speaker points reward impact comparison and pragmatic reasoning.",
+};
 
 interface PacketContext {
   title: string;
@@ -107,7 +155,13 @@ const packetContextSchema = z.object({
 import {
   practiceTurnSchema,
   feedbackReportSchema,
+  judgePersonaSchema,
+  insertJudgeSessionSchema,
+  getSpeechOrder,
   type FillerHit,
+  type FeedbackReport,
+  type JudgePersona,
+  type SpeechPhase,
 } from "@shared/schema";
 
 const turnSchema = practiceTurnSchema;
@@ -123,6 +177,8 @@ const SUBSCORE_LLM_SCHEMA = z.object({
       decision: z.enum(["Aff", "Neg"]),
       reason: z.string(),
       keyVoters: z.array(z.string()).max(5),
+      speakerPoints: z.number().min(1).max(30).optional(),
+      paradigm: z.string().optional(),
     })
     .optional(),
 });
@@ -140,15 +196,22 @@ Return ONLY JSON matching exactly this schema, no prose:
   "weaknesses": ["1-3 short bullets"]
 }`;
 
-const JUDGE_RFD_BLOCK = `Additionally, because the user has enabled JUDGE MODE, also include a Reason For Decision field "rfd" in the JSON, decisively picking a winning side based on the flow as written:
+function judgeRfdBlock(persona: JudgePersona): string {
+  return `You are also acting as the live tournament JUDGE for this round. Your paradigm:
+${PERSONA_GUIDE[persona]}
+
+In addition to the coach scorecard above, include an "rfd" object with a real tournament-style decision:
 {
   "rfd": {
     "decision": "Aff" | "Neg",
-    "reason": "2-4 sentence judge's RFD explaining why that side won, citing flow",
-    "keyVoters": ["short voter 1", "short voter 2", "short voter 3"]
+    "paradigm": "${persona}",
+    "speakerPoints": <integer 1-30, the STUDENT's speaker points on the standard 30-point scale: 27.5 is a good speech, 28-28.5 is very good, 29+ is exceptional, below 26 indicates significant problems>,
+    "reason": "2-4 PARAGRAPHS, separated by \\n\\n. Paragraph 1: the central clash and how you resolved it. Paragraph 2: the key voting issues and weighing. Paragraph 3 (optional): drops, dropped responses, and presumption. Final paragraph: why you signed the ballot for the winner. Speak in first person as the judge.",
+    "keyVoters": ["3-5 short voting issues, each one phrase"]
   }
 }
-Be decisive — pick a winner.`;
+Be decisive — pick a winner. Judge the round AS WRITTEN on the flow, in your declared paradigm. Do not refuse.`;
+}
 
 function feedbackLanguageTail(lang: LanguageCode, includeRfd: boolean): string {
   const fields = includeRfd
@@ -164,8 +227,8 @@ function feedbackPrompt(lang: LanguageCode): string {
   return `${FEEDBACK_PROMPT_BASE}${feedbackLanguageTail(lang, false)}`;
 }
 
-function feedbackPromptJudge(lang: LanguageCode): string {
-  return `${FEEDBACK_PROMPT_BASE}\n\n${JUDGE_RFD_BLOCK}${feedbackLanguageTail(lang, true)}`;
+function feedbackPromptJudge(lang: LanguageCode, persona: JudgePersona): string {
+  return `${FEEDBACK_PROMPT_BASE}\n\n${judgeRfdBlock(persona)}${feedbackLanguageTail(lang, true)}`;
 }
 
 /* ---------- metric helpers (deterministic, computed server-side) ---------- */
@@ -298,6 +361,9 @@ const respondSchema = z.object({
   voice: z.enum(VOICES).default("onyx"),
   packet: packetContextSchema.nullish(),
   language: languageSchema,
+  judgeMode: z.boolean().optional().default(false),
+  persona: judgePersonaSchema.optional(),
+  phaseId: z.string().max(40).optional(),
 });
 
 const packetIngestSchema = z
@@ -340,9 +406,11 @@ Be faithful to the packet. Do not invent evidence the packet does not contain.`;
 const feedbackSchema = z.object({
   topic: z.string().min(1),
   side: z.enum(["Aff", "Neg"]),
+  format: z.string().default("LD"),
   transcript: z.array(turnSchema).min(1),
   judgeMode: z.boolean().optional().default(false),
   language: languageSchema,
+  persona: judgePersonaSchema.optional(),
 });
 
 interface AudioReplyMessage {
@@ -658,7 +726,7 @@ export function registerPracticeRoutes(app: Express) {
   app.post("/api/practice/respond", async (req: Request, res: Response) => {
     const parsed = respondSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "Invalid request" });
-    const { topic, side, format, history, voice, packet, language } = parsed.data;
+    const { topic, side, format, history, voice, packet, language, judgeMode, persona, phaseId } = parsed.data;
 
     // Server-side enforcement: each opponent turn is ~1 minute of practice.
     const MINUTES_PER_TURN = 1;
@@ -670,8 +738,16 @@ export function registerPracticeRoutes(app: Express) {
     }
 
     try {
+      let judgeCtx: { phase: SpeechPhase; index: number; total: number; persona: JudgePersona } | null = null;
+      if (judgeMode && persona && phaseId) {
+        const order = getSpeechOrder(format, side);
+        const idx = order.findIndex((p) => p.id === phaseId);
+        if (idx !== -1) {
+          judgeCtx = { phase: order[idx], index: idx, total: order.length, persona };
+        }
+      }
       const messages: ChatCompletionMessageParam[] = [
-        { role: "system", content: buildSystemPrompt(topic, side, format, language, packet) },
+        { role: "system", content: buildSystemPrompt(topic, side, format, language, packet, judgeCtx) },
         ...history.map<ChatCompletionMessageParam>((m) => ({
           role: m.role,
           content: m.content,
@@ -817,7 +893,7 @@ export function registerPracticeRoutes(app: Express) {
   app.post("/api/practice/feedback", async (req: Request, res: Response) => {
     const parsed = feedbackSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "Invalid request" });
-    const { topic, side, transcript, judgeMode, language } = parsed.data;
+    const { topic, side, format, transcript, judgeMode, language, persona } = parsed.data;
 
     if (judgeMode) {
       const gate = await requireFeature(req, "judgeMode");
@@ -827,8 +903,9 @@ export function registerPracticeRoutes(app: Express) {
           .json({ error: gate.message, code: gate.code });
       }
     }
+    const judgePersona: JudgePersona = persona ?? "Flow";
     const systemPrompt = judgeMode
-      ? feedbackPromptJudge(language)
+      ? feedbackPromptJudge(language, judgePersona)
       : feedbackPrompt(language);
 
     const userTurns = transcript.filter((t) => t.role === "user");
@@ -910,7 +987,18 @@ export function registerPracticeRoutes(app: Express) {
         fillers,
       },
       subscores,
-      ...(judgeMode && llmResult.rfd ? { rfd: llmResult.rfd } : {}),
+      ...(judgeMode && llmResult.rfd
+        ? {
+            rfd: {
+              ...llmResult.rfd,
+              paradigm: llmResult.rfd.paradigm ?? judgePersona,
+              speakerPoints:
+                typeof llmResult.rfd.speakerPoints === "number"
+                  ? Math.max(1, Math.min(30, Math.round(llmResult.rfd.speakerPoints * 2) / 2))
+                  : undefined,
+            },
+          }
+        : {}),
     };
 
     const finalCheck = feedbackReportSchema.safeParse(report);
@@ -918,6 +1006,44 @@ export function registerPracticeRoutes(app: Express) {
       return res.status(500).json({ error: "Failed to assemble report" });
     }
     res.json(finalCheck.data);
+  });
+
+  /* ------------------ Judge-mode saved sessions ------------------ */
+
+  const judgeSessionInputSchema = insertJudgeSessionSchema.omit({ userEmail: true });
+
+  app.post("/api/practice/judge-sessions", async (req: Request, res: Response) => {
+    const email = req.session?.userEmail;
+    if (!email) {
+      return res.status(401).json({ error: "Sign in to save judge sessions." });
+    }
+    const gate = await requireFeature(req, "judgeMode");
+    if (!gate.ok) {
+      return res.status(gate.status).json({ error: gate.message, code: gate.code });
+    }
+    const parsed = judgeSessionInputSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid session payload" });
+    }
+    try {
+      const row = await storage.createJudgeSession({ ...parsed.data, userEmail: email });
+      res.status(201).json({ id: row.id, createdAt: row.createdAt });
+    } catch (err) {
+      console.error("judge session save error", err);
+      res.status(500).json({ error: "Could not save session" });
+    }
+  });
+
+  app.get("/api/practice/judge-sessions", async (req: Request, res: Response) => {
+    const email = req.session?.userEmail;
+    if (!email) return res.json([]);
+    try {
+      const rows = await storage.listJudgeSessions(email);
+      res.json(rows);
+    } catch (err) {
+      console.error("judge session list error", err);
+      res.status(500).json({ error: "Could not load sessions" });
+    }
   });
 
   /* ------------------ Shareable practice clips ------------------ */

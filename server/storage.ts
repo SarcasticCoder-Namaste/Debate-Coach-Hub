@@ -11,6 +11,7 @@ import {
   leads,
   savedTopics,
   coachReferrals,
+  judgeSessions,
   type InsertInquiry,
   type Inquiry,
   type InsertPracticeShare,
@@ -35,6 +36,8 @@ import {
   type SavedTopic,
   type InsertCoachReferral,
   type CoachReferral,
+  type InsertJudgeSession,
+  type JudgeSession,
 } from "@shared/schema";
 import { db } from "./db";
 import { and, asc, desc, eq, isNull, lt } from "drizzle-orm";
@@ -102,6 +105,9 @@ export interface IStorage {
   removeSavedTopic(userId: string, topicId: string): Promise<void>;
 
   createCoachReferral(referral: InsertCoachReferral): Promise<CoachReferral>;
+
+  createJudgeSession(input: InsertJudgeSession): Promise<JudgeSession>;
+  listJudgeSessions(userEmail: string): Promise<JudgeSession[]>;
 }
 
 function nextPeriodEnd(from: Date, interval: string): Date {
@@ -470,6 +476,20 @@ export class DatabaseStorage implements IStorage {
   async createCoachReferral(referral: InsertCoachReferral): Promise<CoachReferral> {
     const [row] = await db.insert(coachReferrals).values(referral).returning();
     return row;
+  }
+
+  async createJudgeSession(input: InsertJudgeSession): Promise<JudgeSession> {
+    const [row] = await db.insert(judgeSessions).values(input).returning();
+    return row;
+  }
+
+  async listJudgeSessions(userEmail: string): Promise<JudgeSession[]> {
+    return db
+      .select()
+      .from(judgeSessions)
+      .where(eq(judgeSessions.userEmail, userEmail))
+      .orderBy(desc(judgeSessions.createdAt))
+      .limit(50);
   }
 }
 

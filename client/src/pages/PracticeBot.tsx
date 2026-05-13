@@ -3,6 +3,12 @@ import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { type DebateTopic, FORMAT_LABELS, TOPICS } from "@shared/topics";
 import { useSavedTopics } from "@/hooks/use-saved-topics";
+import {
+  JUDGE_PERSONAS,
+  type JudgePersona,
+  getSpeechOrder,
+  type SpeechPhase,
+} from "@shared/schema";
 import { motion, AnimatePresence } from "framer-motion";
 import { Navigation } from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
@@ -25,7 +31,7 @@ import {
   Share2, Copy, Check, CalendarDays, Trophy, BookmarkCheck, Mail,
   ChevronDown, ChevronUp, Clock, Lightbulb, Timer, Pause, Play,
   TrendingUp, ThumbsUp, AlertCircle, Gauge, MessageSquare, Layers, Target, Zap,
-  ExternalLink, Quote,
+  ExternalLink, Quote, Award, ChevronRight, Users, Flag, Trophy,
 } from "lucide-react";
 import { Paywall, useFeatureAccess } from "@/components/Paywall";
 import type { FeedbackReport, ResearchBundle } from "@shared/schema";
@@ -233,7 +239,27 @@ export default function PracticeBot() {
     initialTopicId,
   );
   const [judgeMode, setJudgeMode] = useState(false);
+  const [persona, setPersona] = useState<JudgePersona>("Flow");
+  const [judgeRoundActive, setJudgeRoundActive] = useState(false);
+  const [currentPhaseIdx, setCurrentPhaseIdx] = useState(0);
+  const [judgeSessionSavedId, setJudgeSessionSavedId] = useState<number | null>(null);
   const judgeAllowed = useFeatureAccess("judgeMode");
+
+  const { data: authSession } = useQuery<{ email: string | null; signedIn: boolean }>({
+    queryKey: ["/api/auth/session"],
+  });
+  const isSignedIn = !!authSession?.signedIn;
+
+  // Speech order for current format/side (judge mode flow engine).
+  const speechOrder = useMemo<SpeechPhase[]>(
+    () => getSpeechOrder(format, side),
+    [format, side],
+  );
+  const currentPhase: SpeechPhase | null =
+    judgeRoundActive && currentPhaseIdx < speechOrder.length
+      ? speechOrder[currentPhaseIdx]
+      : null;
+  const judgeRoundDone = judgeRoundActive && currentPhaseIdx >= speechOrder.length;
 
   const { data: libraryTopics = [] } = useQuery<DebateTopic[]>({
     queryKey: ["/api/topics"],
@@ -711,6 +737,15 @@ export default function PracticeBot() {
     ];
     setHistory(nextHistory);
 
+    // In Judge Mode the round is fully scripted by speech order — after each
+    // student speech we just advance the phase pointer; the AI's NEXT speech
+    // (if any) is fired by an effect, not by /respond here.
+    if (judgeRoundActive && judgeAllowed) {
+      setCurrentPhaseIdx((i) => i + 1);
+      setProcessing(false);
+      return;
+    }
+
     try {
       const res = await fetch("/api/practice/respond", {
         method: "POST",
@@ -741,6 +776,85 @@ export default function PracticeBot() {
     }
   }
 
+  /* ---------- judge mode: AI delivers its own speeches in order ---------- */
+  const opponentInFlightRef = useRef<string | null>(null);
+
+  async function deliverOpponentSpeech(phase: SpeechPhase, idx: number) {
+    if (opponentInFlightRef.current === phase.id) return;
+    opponentInFlightRef.current = phase.id;
+    setProcessing(true);
+    try {
+      const res = await fetch("/api/practice/respond", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          topic: activeTopic,
+          side,
+          format,
+          history,
+          packet,
+          judgeMode: true,
+          persona,
+          phaseId: phase.id,
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "Opponent failed");
+      }
+      const { transcript, audio } = (await res.json()) as { transcript: string; audio: string };
+      const estDuration = Math.max(30, transcript.split(/\s+/).filter(Boolean).length / 2.6);
+      setHistory((h) => [
+        ...h,
+        { role: "assistant", content: transcript, durationSec: estDuration },
+      ]);
+      if (audio && audioRef.current) {
+        audioRef.current.src = `data:audio/mp3;base64,${audio}`;
+        audioRef.current.onplay = () => setBotSpeaking(true);
+        audioRef.current.onended = () => setBotSpeaking(false);
+        audioRef.current.onpause = () => setBotSpeaking(false);
+        audioRef.current.play().catch(() => {});
+      }
+      setCurrentPhaseIdx((i) => i + 1);
+    } catch (err) {
+      toast({
+        title: "Opponent speech failed",
+        description: err instanceof Error ? err.message : "Try advancing the round manually.",
+        variant: "destructive",
+      });
+    } finally {
+      setProcessing(false);
+      opponentInFlightRef.current = null;
+    }
+  }
+
+  // When it's the AI opponent's turn in a judge round, kick off its speech.
+  useEffect(() => {
+    if (!judgeRoundActive || !judgeAllowed) return;
+    const phase = currentPhase;
+    if (!phase || phase.speaker !== "opponent") return;
+    if (processing || botSpeaking || recording) return;
+    deliverOpponentSpeech(phase, currentPhaseIdx);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [judgeRoundActive, currentPhaseIdx, currentPhase?.id]);
+
+  function startJudgedRound() {
+    if (!judgeAllowed) return;
+    setHistory([]);
+    setFeedback(null);
+    setFeedbackError(null);
+    setLiveTranscript("");
+    setJudgeRoundActive(true);
+    setCurrentPhaseIdx(0);
+    setJudgeSessionSavedId(null);
+  }
+
+  function endJudgedRound() {
+    setJudgeRoundActive(false);
+    setCurrentPhaseIdx(0);
+  }
+
   async function submitTextFallback() {
     const t = textFallback.trim();
     if (!t || processing) return;
@@ -762,9 +876,11 @@ export default function PracticeBot() {
         body: JSON.stringify({
           topic: activeTopic,
           side,
+          format,
           transcript: history,
           judgeMode: useJudge,
           language,
+          persona: useJudge ? persona : undefined,
         }),
       });
       if (res.status === 402 || res.status === 403) {
@@ -791,6 +907,33 @@ export default function PracticeBot() {
       const data = (await res.json()) as Feedback;
       setFeedback(data);
       void saveRound(data);
+
+      // Auto-save judge sessions for signed-in users (whether or not the
+      // round is still "active" — a user may End the round before pulling
+      // their RFD and the saved record should still capture the result).
+      if (useJudge && isSignedIn) {
+        try {
+          const saveRes = await fetch("/api/practice/judge-sessions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+              topic: activeTopic,
+              side,
+              format,
+              persona,
+              transcript: history,
+              feedback: data,
+            }),
+          });
+          if (saveRes.ok) {
+            const saved = await saveRes.json();
+            setJudgeSessionSavedId(saved?.id ?? null);
+          }
+        } catch {
+          // Non-fatal — feedback already shown.
+        }
+      }
     } catch {
       const msg = "Network error while generating your report. Please try again.";
       setFeedbackError(msg);
@@ -1446,6 +1589,110 @@ export default function PracticeBot() {
                       title="Live AI Judge mode is a Pro feature"
                       description="Upgrade to Pro to get a full judge's reason for decision (RFD) at the end of every round."
                     />
+                  </div>
+                )}
+
+                {judgeMode && judgeAllowed && (
+                  <div className="mt-4 rounded-md border border-accent/30 bg-accent/5 p-4 space-y-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Users className="w-4 h-4 text-accent" />
+                        <span className="text-sm font-semibold">Judge paradigm</span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {JUDGE_PERSONAS.map((p) => (
+                          <button
+                            key={p}
+                            type="button"
+                            data-testid={`button-persona-${p.toLowerCase().replace(/\s+/g, "-")}`}
+                            onClick={() => setPersona(p)}
+                            disabled={judgeRoundActive}
+                            className={`px-3 py-2 rounded-md text-xs font-semibold border transition-all ${
+                              persona === p
+                                ? "bg-accent text-white border-accent"
+                                : "bg-background border-border hover:border-accent/50 text-foreground"
+                            } ${judgeRoundActive ? "opacity-60 cursor-not-allowed" : ""}`}
+                          >
+                            {p}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-[11px] text-muted-foreground">
+                        Lay = parent judge · Flow = traditional flow judge ·
+                        Tabula Rasa = blank slate · Policy-maker = net benefits.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-border">
+                      {!judgeRoundActive ? (
+                        <Button
+                          data-testid="button-start-judged-round"
+                          onClick={startJudgedRound}
+                          className="gap-2"
+                        >
+                          <Flag className="w-4 h-4" />
+                          Start judged round
+                        </Button>
+                      ) : (
+                        <>
+                          <span className="text-xs text-muted-foreground">
+                            Speech {Math.min(currentPhaseIdx + 1, speechOrder.length)} of {speechOrder.length}
+                            {currentPhase ? ` · ${currentPhase.label}` : " · Round complete"}
+                          </span>
+                          <Button
+                            data-testid="button-end-judged-round"
+                            variant="outline"
+                            size="sm"
+                            onClick={endJudgedRound}
+                          >
+                            End round
+                          </Button>
+                        </>
+                      )}
+                    </div>
+
+                    {judgeRoundActive && (
+                      <div className="space-y-1.5">
+                        {speechOrder.map((p, i) => {
+                          const isDone = i < currentPhaseIdx;
+                          const isActive = i === currentPhaseIdx;
+                          return (
+                            <div
+                              key={p.id}
+                              data-testid={`row-phase-${p.id}`}
+                              className={`flex items-center gap-2 px-3 py-2 rounded text-xs ${
+                                isActive
+                                  ? "bg-accent/15 border border-accent/40"
+                                  : isDone
+                                    ? "bg-muted/40 text-muted-foreground"
+                                    : "bg-background border border-border text-muted-foreground"
+                              }`}
+                            >
+                              {isDone ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              ) : isActive ? (
+                                <ChevronRight className="w-3.5 h-3.5 text-accent" />
+                              ) : (
+                                <span className="w-3.5 h-3.5 inline-block" />
+                              )}
+                              <span className="font-semibold">{p.label}</span>
+                              <span className="ml-auto inline-flex items-center gap-2">
+                                <span
+                                  className={`px-1.5 py-0.5 rounded ${
+                                    p.speaker === "user"
+                                      ? "bg-primary/10 text-primary"
+                                      : "bg-orange-500/10 text-orange-600"
+                                  }`}
+                                >
+                                  {p.speaker === "user" ? "You" : "AI"}
+                                </span>
+                                <span>{Math.round(p.minutes * 60)}s</span>
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -2579,33 +2826,96 @@ export default function PracticeBot() {
                 {feedback.rfd && typeof feedback.rfd === "object" && (
                   <div
                     data-testid="card-rfd"
-                    className="mt-0 pt-4 border-t border-border bg-accent/5 -mx-6 px-6 py-4 rounded-b-lg"
+                    className="mt-0 pt-6 border-t border-border bg-gradient-to-br from-accent/10 via-accent/5 to-transparent -mx-6 px-6 py-6 rounded-b-lg"
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="text-[10px] uppercase tracking-wider font-bold text-accent">
-                        Judge's RFD
+                    <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
+                      <div>
+                        <div className="text-[10px] uppercase tracking-[0.18em] font-bold text-accent flex items-center gap-1.5">
+                          <Trophy className="w-3.5 h-3.5" /> Tournament-style RFD
+                        </div>
+                        <div
+                          data-testid="text-rfd-decision"
+                          className="mt-2 text-2xl font-display font-bold text-foreground"
+                        >
+                          {feedback.rfd.decision} wins the round
+                        </div>
+                        {feedback.rfd.paradigm && (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            Paradigm:{" "}
+                            <span
+                              data-testid="text-rfd-paradigm"
+                              className="font-semibold text-foreground"
+                            >
+                              {feedback.rfd.paradigm}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                      <span
-                        data-testid="text-rfd-decision"
-                        className="text-xs font-bold px-2 py-0.5 rounded bg-accent text-white"
-                      >
-                        {feedback.rfd.decision} wins
-                      </span>
+                      {typeof feedback.rfd.speakerPoints === "number" && (
+                        <div className="text-right">
+                          <div className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">
+                            Speaker points
+                          </div>
+                          <div
+                            data-testid="text-rfd-speaker-points"
+                            className="font-display text-5xl font-bold text-accent leading-none"
+                          >
+                            {feedback.rfd.speakerPoints.toFixed(1)}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground mt-0.5">
+                            of 30
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <p
+
+                    <div
                       data-testid="text-rfd-reason"
-                      className="text-sm text-foreground leading-relaxed mb-2"
+                      className="text-sm text-foreground leading-relaxed space-y-3"
                     >
-                      {feedback.rfd.reason}
-                    </p>
-                    {feedback.rfd.keyVoters?.length > 0 && (
-                      <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
-                        {feedback.rfd.keyVoters.map((v, i) => (
-                          <li key={i} data-testid={`text-rfd-voter-${i}`}>
-                            {v}
-                          </li>
+                      {feedback.rfd.reason
+                        .split(/\n\s*\n+/)
+                        .map((p) => p.trim())
+                        .filter(Boolean)
+                        .map((para, i) => (
+                          <p key={i} data-testid={`text-rfd-paragraph-${i}`}>
+                            {para}
+                          </p>
                         ))}
-                      </ul>
+                    </div>
+
+                    {feedback.rfd.keyVoters?.length > 0 && (
+                      <div className="mt-5 pt-4 border-t border-border/60">
+                        <div className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-2 flex items-center gap-1.5">
+                          <Award className="w-3 h-3" /> Key voters
+                        </div>
+                        <ul className="text-xs text-foreground/80 space-y-1.5">
+                          {feedback.rfd.keyVoters.map((v, i) => (
+                            <li
+                              key={i}
+                              data-testid={`text-rfd-voter-${i}`}
+                              className="flex items-start gap-2"
+                            >
+                              <ChevronRight className="w-3 h-3 mt-0.5 text-accent shrink-0" />
+                              <span>{v}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {judgeSessionSavedId !== null && (
+                      <div
+                        data-testid="text-judge-session-saved"
+                        className="mt-4 text-[11px] text-emerald-600 flex items-center gap-1.5"
+                      >
+                        <Check className="w-3 h-3" /> Round saved to your history.
+                      </div>
+                    )}
+                    {judgeRoundActive && !isSignedIn && (
+                      <div className="mt-4 text-[11px] text-muted-foreground">
+                        Sign in to save this round to your history.
+                      </div>
                     )}
                   </div>
                 )}
