@@ -11,7 +11,7 @@ import {
   GraduationCap, BookOpen, FileText, MessageSquare, Award, Star,
   ShieldCheck, Clock3, ArrowUp, Search, Target, Zap,
   Megaphone, Gavel, Scale, CalendarDays, MapPin,
-  Mail, Send, Sparkles, Heart, Lightbulb, Compass, MessageCircle, X
+  Mail, Send, Sparkles, Heart, Lightbulb, Compass
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -127,107 +127,6 @@ function NewsletterForm() {
         {status === "success" ? "Thanks! Check your inbox to confirm." : ""}
       </p>
     </>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Floating Chat CTA                                                  */
-/* ------------------------------------------------------------------ */
-function FloatingChatCTA({ onCta, onPractice }: { onCta: () => void; onPractice: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [show, setShow] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const popupCtaRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    const t = setTimeout(() => setShow(true), 4000);
-    return () => clearTimeout(t);
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    popupCtaRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setOpen(false);
-        triggerRef.current?.focus();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
-
-  if (!show) return null;
-
-  return (
-    <div className="fixed bottom-6 left-6 z-50">
-      {open && (
-        <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.9 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 20, scale: 0.9 }}
-          transition={{ duration: 0.25 }}
-          className="absolute bottom-16 left-0 w-72 bg-card border border-border rounded-2xl shadow-2xl p-5"
-          data-testid="chat-popup"
-          role="dialog"
-          aria-modal="false"
-          aria-label="Quick contact"
-        >
-          <button
-            onClick={() => setOpen(false)}
-            className="absolute top-3 right-3 text-muted-foreground hover:text-foreground"
-            aria-label="Close"
-            data-testid="button-close-chat"
-          >
-            <X className="w-4 h-4" />
-          </button>
-          <div className="flex items-start gap-3 mb-3">
-            <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center flex-shrink-0">
-              <GraduationCap className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="font-bold text-primary text-sm">Hi there! 👋</p>
-              <p className="text-xs text-muted-foreground">Coach available now</p>
-            </div>
-          </div>
-          <p className="text-sm text-foreground/80 mb-4">
-            Try our brand-new AI Practice Bot, or book a free 20-minute consult.
-          </p>
-          <button
-            ref={popupCtaRef}
-            onClick={() => { onPractice(); setOpen(false); triggerRef.current?.focus(); }}
-            data-testid="button-chat-practice"
-            className="w-full mb-2 px-4 py-2.5 rounded-full bg-accent text-white text-sm font-semibold hover:bg-accent/90 transition-all flex items-center justify-center gap-2"
-          >
-            <MessageCircle className="w-4 h-4" /> Try the Practice Bot
-          </button>
-          <button
-            onClick={() => { onCta(); setOpen(false); triggerRef.current?.focus(); }}
-            data-testid="button-chat-cta"
-            className="w-full px-4 py-2.5 rounded-full bg-primary/10 text-primary text-sm font-semibold hover:bg-primary/20 transition-all"
-          >
-            Book Free Consult
-          </button>
-        </motion.div>
-      )}
-      <motion.button
-        ref={triggerRef}
-        initial={{ opacity: 0, scale: 0.8 }}
-        animate={{ opacity: 1, scale: 1 }}
-        whileHover={{ scale: 1.08 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={() => setOpen((o) => !o)}
-        data-testid="button-floating-chat"
-        className="w-14 h-14 rounded-full bg-primary text-white shadow-2xl flex items-center justify-center hover:bg-primary/90 transition-colors relative"
-        aria-label={open ? "Close chat" : "Open chat"}
-        aria-expanded={open}
-      >
-        {open ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
-        {!open && (
-          <span className="absolute -top-1 -right-1 w-3 h-3 bg-accent rounded-full ring-2 ring-background animate-pulse" />
-        )}
-      </motion.button>
-    </div>
   );
 }
 
@@ -1131,9 +1030,6 @@ export default function Home() {
           </p>
         </div>
       </footer>
-
-      {/* Floating Chat Bubble */}
-      <FloatingChatCTA onCta={scrollToContact} onPractice={() => (window.location.href = "/practice")} />
 
       {/* Back to top */}
       {showTopBtn && (

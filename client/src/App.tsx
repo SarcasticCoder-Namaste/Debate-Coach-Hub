@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { AssistantChatbot } from "@/components/AssistantChatbot";
 import Home from "@/pages/Home";
 import SignIn from "@/pages/SignIn";
 import PracticeBot from "@/pages/PracticeBot";
@@ -27,6 +28,7 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <Router />
+          <AssistantChatbot />
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
