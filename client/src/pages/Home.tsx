@@ -1,8 +1,10 @@
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Navigation } from "@/components/Navigation";
 import { ServiceCard } from "@/components/ServiceCard";
 import { ContactForm } from "@/components/ContactForm";
 import { Button } from "@/components/ui/button";
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { 
   Users, 
   Trophy, 
@@ -12,17 +14,28 @@ import {
   Calendar,
   ArrowRight,
   GraduationCap,
-  BarChart3,
   BookOpen,
   FileText,
   MessageSquare,
   Award,
   Star,
   ShieldCheck,
-  Clock3
+  Clock3,
+  ArrowUp,
+  Search,
+  Target,
+  Zap
 } from "lucide-react";
 
 export default function Home() {
+  const [showTopBtn, setShowTopBtn] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => setShowTopBtn(window.scrollY > 400);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
   const scrollToContact = () => {
     document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" });
   };
@@ -254,6 +267,34 @@ export default function Home() {
         </div>
       </section>
 
+      <section id="how-it-works" className="py-24 bg-white">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-16">
+            <span className="text-accent font-bold tracking-wider uppercase text-sm">Process</span>
+            <h2 className="text-3xl md:text-5xl font-display font-bold text-primary mt-2 mb-4">How It Works</h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">A simple 4-step path from first contact to tournament success.</p>
+          </div>
+          <div className="grid md:grid-cols-4 gap-6 relative">
+            <div className="hidden md:block absolute top-12 left-[12.5%] right-[12.5%] h-0.5 bg-border -z-0"></div>
+            {[
+              { step: "1", icon: Calendar, title: "Book a Consultation", desc: "Schedule a free 20-minute call to discuss your goals." },
+              { step: "2", icon: Search, title: "Skill Assessment", desc: "We review your past rounds and identify key growth areas." },
+              { step: "3", icon: Target, title: "Custom Plan", desc: "Receive a tailored coaching roadmap based on your format." },
+              { step: "4", icon: Zap, title: "Compete & Win", desc: "Apply strategies in tournaments and iterate with feedback." },
+            ].map((item) => (
+              <div key={item.step} data-testid={`step-${item.step}`} className="relative z-10 text-center">
+                <div className="w-24 h-24 rounded-full bg-primary/5 border-2 border-primary/20 flex items-center justify-center mx-auto mb-6 hover:bg-primary hover:border-primary transition-colors group">
+                  <item.icon className="w-8 h-8 text-primary group-hover:text-white transition-colors" />
+                </div>
+                <div className="text-sm font-bold text-accent mb-2">Step {item.step}</div>
+                <h3 className="text-xl font-bold text-primary mb-2">{item.title}</h3>
+                <p className="text-muted-foreground text-sm">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <section id="stats" className="py-20 bg-white">
         <div className="container mx-auto px-4 grid md:grid-cols-4 gap-6 text-center">
           {[
@@ -306,9 +347,27 @@ export default function Home() {
                 author: "David L.",
                 role: "College Sophomore",
                 award: "NDT Qualifier"
+              },
+              {
+                quote: "I was consistently dropping rounds in rebuttal. The targeted drills turned my weakest point into my strongest. I broke at state for the first time.",
+                author: "Emily T.",
+                role: "High School Junior",
+                award: "State Qualifier"
+              },
+              {
+                quote: "As a parent, I appreciate the detailed progress reports after every session. I can see exactly what my daughter is improving on.",
+                author: "Jennifer W.",
+                role: "Parent",
+                award: "Debate Mom"
+              },
+              {
+                quote: "The coach doesn't just tell you what's wrong—he teaches you how to fix it. My cross-examination skills improved dramatically.",
+                author: "Alex K.",
+                role: "College Freshman",
+                award: "First-Year Competitor"
               }
             ].map((testimonial, i) => (
-              <div key={i} className="bg-white/5 backdrop-blur-sm border border-white/10 p-8 rounded-2xl hover:bg-white/10 transition-colors">
+              <div key={i} data-testid={`testimonial-${i}`} className="bg-white/5 backdrop-blur-sm border border-white/10 p-8 rounded-2xl hover:bg-white/10 transition-colors">
                 <Quote className="w-10 h-10 text-accent mb-4 opacity-80" />
                 <p className="text-lg leading-relaxed text-white/90 mb-6 font-light italic">"{testimonial.quote}"</p>
                 <div className="flex items-center gap-4">
@@ -355,17 +414,21 @@ export default function Home() {
             <h2 className="text-3xl md:text-5xl font-display font-bold text-primary mb-4">Frequently Asked Questions</h2>
             <p className="text-muted-foreground">Quick answers about sessions, scheduling, and coaching style.</p>
           </div>
-          <div className="max-w-3xl mx-auto grid gap-4">
-            {[
-              ["Who do you coach?", "Middle school, high school, and college debaters."],
-              ["Do you offer virtual sessions?", "Yes, Zoom coaching is available worldwide."],
-              ["How do I get started?", "Book a free consultation and we'll map out next steps."],
-            ].map(([q, a]) => (
-              <div key={q} className="p-6 rounded-2xl bg-white border border-border">
-                <h3 className="font-bold text-primary mb-2">{q}</h3>
-                <p className="text-muted-foreground">{a}</p>
-              </div>
-            ))}
+          <div className="max-w-3xl mx-auto">
+            <Accordion type="single" collapsible className="bg-white rounded-2xl border border-border p-2">
+              {[
+                ["Who do you coach?", "Middle school, high school, and college debaters in Lincoln-Douglas, Public Forum, and Policy formats."],
+                ["Do you offer virtual sessions?", "Yes, Zoom coaching is available worldwide with flexible evening and weekend scheduling."],
+                ["How do I get started?", "Book a free consultation and we'll map out next steps tailored to your goals."],
+                ["What formats do you specialize in?", "Lincoln-Douglas, Public Forum, and Policy Debate at all skill levels."],
+                ["How long is each session?", "Standard sessions are 60 minutes. Tournament prep intensives are 90 minutes."],
+              ].map(([q, a]) => (
+                <AccordionItem key={q} value={q} className="px-4">
+                  <AccordionTrigger className="text-left font-bold text-primary hover:no-underline">{q}</AccordionTrigger>
+                  <AccordionContent className="text-muted-foreground">{a}</AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
           </div>
         </div>
       </section>
@@ -430,6 +493,9 @@ export default function Home() {
             <button onClick={() => scrollToSection("home")} className="hover:text-white transition-colors">Home</button>
             <button onClick={() => scrollToSection("about")} className="hover:text-white transition-colors">About</button>
             <button onClick={() => scrollToSection("services")} className="hover:text-white transition-colors">Services</button>
+            <button onClick={() => scrollToSection("how-it-works")} className="hover:text-white transition-colors">How It Works</button>
+            <button onClick={() => scrollToSection("testimonials")} className="hover:text-white transition-colors">Testimonials</button>
+            <button onClick={() => scrollToSection("faq")} className="hover:text-white transition-colors">FAQ</button>
             <button onClick={() => scrollToSection("contact")} className="hover:text-white transition-colors">Contact</button>
           </div>
           <p className="text-white/40 text-sm">
@@ -437,6 +503,18 @@ export default function Home() {
           </p>
         </div>
       </footer>
+
+      {/* Back to top */}
+      {showTopBtn && (
+        <button
+          data-testid="button-back-to-top"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          className="fixed bottom-6 right-6 z-50 bg-primary text-white p-3 rounded-full shadow-xl hover:bg-primary/90 transition-all hover:-translate-y-1"
+          aria-label="Back to top"
+        >
+          <ArrowUp className="w-5 h-5" />
+        </button>
+      )}
     </div>
   );
   

@@ -47,10 +47,10 @@ export function Navigation() {
 
         {/* Desktop Links */}
         <div className="hidden md:flex items-center gap-8">
-          {["About", "Services", "Testimonials"].map((item) => (
+          {["About", "Services", "How It Works", "Testimonials", "FAQ"].map((item) => (
             <button
               key={item}
-              onClick={() => scrollToSection(item.toLowerCase())}
+              onClick={() => scrollToSection(item.toLowerCase().replace(/ /g, "-"))}
               className={`text-sm font-medium hover:text-accent transition-colors ${
                 isScrolled ? "text-foreground" : "text-white/90 hover:text-white"
               }`}
@@ -84,11 +84,11 @@ export function Navigation() {
       {/* Mobile Menu */}
       {mobileMenuOpen && (
         <div className="md:hidden absolute top-full left-0 right-0 bg-white border-b border-border shadow-xl p-4 flex flex-col gap-4 animate-in slide-in-from-top-5">
-          {["Home", "About", "Services", "Testimonials", "Contact"].map((item) => (
+          {["Home", "About", "Services", "How It Works", "Testimonials", "FAQ", "Contact"].map((item) => (
             <button
-              data-testid={`button-nav-${item.toLowerCase()}`}
+              data-testid={`button-nav-${item.toLowerCase().replace(/ /g, "-")}`}
               key={item}
-              onClick={() => scrollToSection(item.toLowerCase())}
+              onClick={() => scrollToSection(item.toLowerCase().replace(/ /g, "-"))}
               className="text-left text-lg font-medium text-foreground py-2 border-b border-border/50 last:border-0"
             >
               {item}
