@@ -15,6 +15,8 @@ import Pricing from "@/pages/Pricing";
 import Research from "@/pages/Research";
 import Dashboard from "@/pages/Dashboard";
 import History from "@/pages/History";
+import Coaches from "@/pages/Coaches";
+import AdminLeads from "@/pages/AdminLeads";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -32,6 +34,8 @@ function Router() {
       <Route path="/my-research" component={Dashboard} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/history" component={History} />
+      <Route path="/coaches" component={Coaches} />
+      <Route path="/admin/leads" component={AdminLeads} />
       <Route component={NotFound} />
     </Switch>
   );

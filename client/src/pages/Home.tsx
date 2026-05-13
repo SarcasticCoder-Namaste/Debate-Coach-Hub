@@ -323,6 +323,16 @@ export default function Home() {
                   Try the AI Practice Bot
                 </Button>
               </Link>
+              <Link href="/coaches" data-testid="link-hero-book-coach">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="bg-transparent border-white/30 text-white hover:bg-white/10 text-lg h-14 px-8 rounded-xl backdrop-blur-sm w-full sm:w-auto"
+                >
+                  <Calendar className="w-5 h-5 mr-2 text-accent" />
+                  Book a Coach
+                </Button>
+              </Link>
               <Button
                 variant="outline"
                 size="lg"
@@ -977,6 +987,21 @@ export default function Home() {
               <p className="text-sm text-muted-foreground">
                 Yes! It's a 20-minute discovery call to see if we're a good fit. No commitment required.
               </p>
+            </div>
+
+            <div className="p-6 rounded-xl border border-accent/30 bg-accent/5 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-accent/15 flex items-center justify-center flex-shrink-0">
+                <Calendar className="w-5 h-5 text-accent" />
+              </div>
+              <div className="flex-1">
+                <h4 className="font-bold text-primary mb-1">Already know who you want?</h4>
+                <p className="text-sm text-muted-foreground">
+                  Skip the form and book a specific coach by name and slot.
+                </p>
+              </div>
+              <Link href="/coaches" data-testid="link-contact-book-coach">
+                <Button className="bg-accent text-white hover:bg-accent/90">Book a Coach</Button>
+              </Link>
             </div>
           </motion.div>
 

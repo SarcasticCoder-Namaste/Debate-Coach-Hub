@@ -427,3 +427,56 @@ export const researchRequestSchema = z.object({
 });
 
 export type ResearchRequest = z.infer<typeof researchRequestSchema>;
+
+export const coaches = pgTable("coaches", {
+  id: serial("id").primaryKey(),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  photoUrl: text("photo_url").notNull(),
+  bio: text("bio").notNull(),
+  specialties: text("specialties").array().notNull(),
+  formats: text("formats").array().notNull(),
+  pricePerHour: integer("price_per_hour").notNull(),
+  availability: text("availability").array().notNull(),
+});
+
+export const insertCoachSchema = createInsertSchema(coaches).omit({ id: true });
+export type Coach = typeof coaches.$inferSelect;
+export type InsertCoach = z.infer<typeof insertCoachSchema>;
+
+export const LEAD_STATUSES = ["New", "Contacted", "Booked", "Closed"] as const;
+export type LeadStatus = (typeof LEAD_STATUSES)[number];
+
+export const leads = pgTable("leads", {
+  id: serial("id").primaryKey(),
+  coachId: integer("coach_id").notNull(),
+  studentName: text("student_name").notNull(),
+  email: text("email").notNull(),
+  format: text("format").notNull(),
+  slot: text("slot").notNull(),
+  durationMin: integer("duration_min").notNull(),
+  goals: text("goals").notNull(),
+  sessionLink: text("session_link"),
+  status: text("status").notNull().default("New"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertLeadSchema = createInsertSchema(leads)
+  .omit({ id: true, createdAt: true, status: true, notes: true })
+  .extend({
+    studentName: z.string().min(1, "Name is required"),
+    email: z.string().email("Valid email is required"),
+    goals: z.string().min(5, "Tell us a little about your goals"),
+    durationMin: z.union([z.literal(30), z.literal(60)]),
+    sessionLink: z.string().url().optional().or(z.literal("").transform(() => undefined)),
+  });
+
+export const updateLeadSchema = z.object({
+  status: z.enum(LEAD_STATUSES).optional(),
+  notes: z.string().optional(),
+});
+
+export type Lead = typeof leads.$inferSelect;
+export type InsertLead = z.infer<typeof insertLeadSchema>;
+export type UpdateLead = z.infer<typeof updateLeadSchema>;

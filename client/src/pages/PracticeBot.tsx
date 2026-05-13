@@ -21,7 +21,7 @@ import {
   Mic, MicOff, Video, VideoOff, Loader2, Sparkles, Download,
   Volume2, RotateCcw, ArrowLeft, Send, AlertTriangle, Gavel, Languages,
   FileText, Upload, X, BookOpen,
-  Share2, Copy, Check,
+  Share2, Copy, Check, CalendarDays,
   ChevronDown, ChevronUp, Clock, Lightbulb, Timer, Pause, Play,
   TrendingUp, ThumbsUp, AlertCircle, Gauge, MessageSquare, Layers, Target, Zap,
   ExternalLink, Quote,
@@ -1933,11 +1933,19 @@ export default function PracticeBot() {
             </Card>
           )}
 
-          {feedback && (
+          {feedback && (() => {
+            const scores = [feedback.clarity, feedback.structure, feedback.evidence, feedback.delivery]
+              .filter((x): x is { score: number; comment: string } => !!x)
+              .map((x) => x.score);
+            const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+            const lowScore = avg > 0 && avg < 7;
+            const coachLink = `/coaches?format=${encodeURIComponent(format)}&score=${avg.toFixed(1)}`;
+            return (
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4 }}
+              className="space-y-4"
             >
               <Card className="overflow-hidden border-accent/40" data-testid="card-feedback">
                 {/* Header: overall score */}
@@ -2142,8 +2150,54 @@ export default function PracticeBot() {
                   </div>
                 )}
               </Card>
+
+              {lowScore ? (
+                <Card className="p-5 border-accent/60 bg-accent/5" data-testid="card-coach-nudge">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-full bg-accent/15 flex items-center justify-center flex-shrink-0">
+                      <Lightbulb className="w-5 h-5 text-accent" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-display font-bold text-primary text-sm mb-1">
+                        Want a human coach to take it from here?
+                      </p>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Your average was {avg.toFixed(1)}/10. A 30-minute session with a coach can fix
+                        the gaps the AI flagged in days, not weeks.
+                      </p>
+                      <Link href={coachLink} data-testid="link-book-after-low-score">
+                        <Button size="sm" className="bg-accent text-accent-foreground hover:bg-accent/90">
+                          <CalendarDays className="w-3.5 h-3.5 mr-1.5" /> Book a Coach
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                </Card>
+              ) : (
+                <Card className="p-5" data-testid="card-coach-cta">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <CalendarDays className="w-5 h-5 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-display font-bold text-primary text-sm mb-1">
+                        Take this momentum into a real session
+                      </p>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Pair your AI prep with a human coach to fine-tune strategy before your next round.
+                      </p>
+                      <Link href={coachLink} data-testid="link-book-coach-results">
+                        <Button size="sm" variant="outline" className="border-primary text-primary hover:bg-primary/5">
+                          Browse coaches
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                </Card>
+              )}
             </motion.div>
-          )}
+            );
+          })()}
         </div>
       </section>
     </div>

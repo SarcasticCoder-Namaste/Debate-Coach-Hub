@@ -5,6 +5,8 @@ import {
   researchBundles,
   users,
   practiceRounds,
+  coaches,
+  leads,
   type InsertInquiry,
   type Inquiry,
   type InsertPracticeShare,
@@ -17,6 +19,11 @@ import {
   type PracticeRound,
   type InsertPracticeRound,
   type PracticeFeedback,
+  type Coach,
+  type InsertCoach,
+  type Lead,
+  type InsertLead,
+  type UpdateLead,
 } from "@shared/schema";
 import { db } from "./db";
 import { and, eq, lt, desc, isNull } from "drizzle-orm";
@@ -54,6 +61,14 @@ export interface IStorage {
   listPracticeRounds(userId: number): Promise<PracticeRound[]>;
   getPracticeRound(userId: number, id: number): Promise<PracticeRound | undefined>;
   deletePracticeRound(userId: number, id: number): Promise<boolean>;
+
+  listCoaches(): Promise<Coach[]>;
+  getCoach(id: number): Promise<Coach | undefined>;
+  upsertCoachBySlug(coach: InsertCoach): Promise<Coach>;
+
+  createLead(lead: InsertLead): Promise<Lead>;
+  listLeads(): Promise<Lead[]>;
+  updateLead(id: number, patch: UpdateLead): Promise<Lead | undefined>;
 }
 
 function nextPeriodEnd(from: Date, interval: string): Date {
@@ -268,6 +283,54 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(practiceRounds.id, id), eq(practiceRounds.userId, userId)))
       .returning({ id: practiceRounds.id });
     return res.length > 0;
+  }
+
+  async listCoaches(): Promise<Coach[]> {
+    return await db.select().from(coaches).orderBy(coaches.id);
+  }
+
+  async getCoach(id: number): Promise<Coach | undefined> {
+    const [c] = await db.select().from(coaches).where(eq(coaches.id, id));
+    return c;
+  }
+
+  async upsertCoachBySlug(coach: InsertCoach): Promise<Coach> {
+    const [existing] = await db
+      .select()
+      .from(coaches)
+      .where(eq(coaches.slug, coach.slug));
+    if (existing) {
+      const [updated] = await db
+        .update(coaches)
+        .set(coach)
+        .where(eq(coaches.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(coaches).values(coach).returning();
+    return created;
+  }
+
+  async createLead(lead: InsertLead): Promise<Lead> {
+    const [created] = await db.insert(leads).values(lead).returning();
+    return created;
+  }
+
+  async listLeads(): Promise<Lead[]> {
+    return await db.select().from(leads).orderBy(desc(leads.createdAt));
+  }
+
+  async updateLead(id: number, patch: UpdateLead): Promise<Lead | undefined> {
+    if (Object.keys(patch).length === 0) {
+      const [row] = await db.select().from(leads).where(eq(leads.id, id));
+      return row;
+    }
+    const [updated] = await db
+      .update(leads)
+      .set(patch)
+      .where(eq(leads.id, id))
+      .returning();
+    return updated;
   }
 }
 

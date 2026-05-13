@@ -1,14 +1,31 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import OpenAI from "openai";
 import { z } from "zod";
 import { storage } from "./storage";
-import { insertInquirySchema, savePracticeRoundSchema } from "@shared/schema";
+import {
+  insertInquirySchema,
+  savePracticeRoundSchema,
+  insertLeadSchema,
+  updateLeadSchema,
+} from "@shared/schema";
 import { TOPICS, getTopicById } from "@shared/topics";
 import { registerPracticeRoutes } from "./practice";
 import { registerAuthRoutes, requireAuth, setupSession } from "./auth";
 import { registerBillingRoutes } from "./billing";
 import { registerResearchRoutes } from "./research";
+import { sendAdminLeadAlert, sendBookingConfirmation } from "./notify";
+import { seedCoaches } from "./seed";
+
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "demo-admin";
+
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  const provided =
+    req.header("x-admin-token") ||
+    (req.header("authorization") || "").replace(/^Bearer\s+/i, "");
+  if (provided && provided === ADMIN_TOKEN) return next();
+  res.status(401).json({ message: "Unauthorized" });
+}
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -109,6 +126,64 @@ export async function registerRoutes(
   });
 
   registerAuthRoutes(app);
+  app.get("/api/coaches", async (_req, res) => {
+    try {
+      const coaches = await storage.listCoaches();
+      res.json(coaches);
+    } catch (err) {
+      console.error("listCoaches error", err);
+      res.status(500).json({ message: "Failed to load coaches" });
+    }
+  });
+
+  app.post("/api/leads", async (req, res) => {
+    const parsed = insertLeadSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: "Invalid booking",
+        errors: parsed.error.flatten(),
+      });
+    }
+    const coach = await storage.getCoach(parsed.data.coachId);
+    if (!coach) return res.status(404).json({ message: "Coach not found" });
+    if (!coach.availability.includes(parsed.data.slot)) {
+      return res.status(400).json({ message: "Slot is no longer available" });
+    }
+    try {
+      const lead = await storage.createLead(parsed.data);
+      await Promise.all([
+        sendBookingConfirmation(lead, coach),
+        sendAdminLeadAlert(lead, coach),
+      ]);
+      res.status(201).json(lead);
+    } catch (err) {
+      console.error("createLead error", err);
+      res.status(500).json({ message: "Failed to create booking" });
+    }
+  });
+
+  app.get("/api/admin/leads", requireAdmin, async (_req, res) => {
+    const all = await storage.listLeads();
+    const coaches = await storage.listCoaches();
+    const byId = new Map(coaches.map((c) => [c.id, c]));
+    res.json(
+      all.map((l) => ({
+        ...l,
+        coachName: byId.get(l.coachId)?.name ?? "Unknown",
+      })),
+    );
+  });
+
+  app.patch("/api/admin/leads/:id", requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ message: "Bad id" });
+    const parsed = updateLeadSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid update" });
+    const updated = await storage.updateLead(id, parsed.data);
+    if (!updated) return res.status(404).json({ message: "Not found" });
+    res.json(updated);
+  });
+
   registerPracticeRoutes(app);
   registerBillingRoutes(app);
   registerResearchRoutes(app);
@@ -218,6 +293,9 @@ export async function registerRoutes(
     if (!ok) return res.status(404).json({ error: "Not found" });
     res.json({ ok: true });
   });
+
+  // Seed sample coaches in the background; don't block startup if it fails.
+  seedCoaches().catch((err) => console.error("[seed] failed:", err));
 
   return httpServer;
 }

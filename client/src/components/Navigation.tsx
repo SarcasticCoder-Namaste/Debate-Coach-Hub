@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Menu, X, GraduationCap, Sun, Moon, Monitor, LogIn, LogOut, Mic, Library, History as HistoryIcon, Tag, Crown, Search, LayoutDashboard } from "lucide-react";
+import { Menu, X, GraduationCap, Sun, Moon, Monitor, LogIn, LogOut, Mic, Library, History as HistoryIcon, Tag, Crown, Search, LayoutDashboard, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/ThemeProvider";
 import { Link, useLocation } from "wouter";
@@ -171,6 +171,17 @@ export function Navigation() {
             </Link>
           )}
 
+          <Link
+            href="/coaches"
+            data-testid="nav-link-coaches"
+            className={`inline-flex items-center gap-1.5 text-sm font-semibold transition-colors ${
+              isDarkHero
+                ? "text-white hover:text-accent"
+                : "text-foreground/80 hover:text-foreground"
+            }`}
+          >
+            <CalendarDays className="w-3.5 h-3.5" /> Book a Coach
+          </Link>
           {/* Theme Toggle */}
           <div className="flex items-center gap-1 rounded-full bg-muted p-1 border border-border">
             <button
@@ -348,6 +359,14 @@ export function Navigation() {
               <HistoryIcon className="w-4 h-4" /> My History
             </Link>
           )}
+          <Link
+            href="/coaches"
+            data-testid="button-nav-coaches"
+            onClick={() => setMobileMenuOpen(false)}
+            className="flex items-center gap-2 text-left text-lg font-semibold text-foreground py-2 border-b border-border/50"
+          >
+            <CalendarDays className="w-4 h-4" /> Book a Coach
+          </Link>
           {user ? (
             <button
               onClick={() => { setMobileMenuOpen(false); signOut.mutate(); }}
