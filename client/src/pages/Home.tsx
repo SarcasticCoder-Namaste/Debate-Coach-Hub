@@ -8,11 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import {
   Users, Trophy, Mic, Quote, CheckCircle2, Calendar, ArrowRight,
-  GraduationCap, BookOpen, FileText, MessageSquare, Award, Star,
+  BookOpen, FileText, MessageSquare, Award, Star,
   ShieldCheck, Clock3, ArrowUp, Search, Target, Zap,
   Megaphone, Gavel, Scale, CalendarDays, MapPin,
   Mail, Send, Sparkles, Heart, Lightbulb, Compass
 } from "lucide-react";
+import { LogoMark } from "@/components/Logo";
 
 /* ------------------------------------------------------------------ */
 /*  AnimatedCounter                                                    */
@@ -1038,8 +1039,10 @@ export default function Home() {
             viewport={{ once: true }}
             className="flex items-center justify-center gap-2 mb-6 opacity-90"
           >
-            <GraduationCap className="w-8 h-8" />
-            <span className="text-2xl font-bold font-display">DebateMastery</span>
+            <LogoMark size={44} />
+            <span className="text-2xl font-bold font-display tracking-tight leading-none">
+              Debate<span className="text-accent">Mastery</span>
+            </span>
           </motion.div>
 
           <div className="flex flex-wrap justify-center gap-6 mb-8 text-sm text-white/70">

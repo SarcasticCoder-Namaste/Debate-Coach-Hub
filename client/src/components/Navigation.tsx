@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Menu, X, GraduationCap, Sun, Moon, Monitor, LogIn, LogOut, Mic, Library, History as HistoryIcon, Tag, Crown, Search, LayoutDashboard, CalendarDays, Trophy, Zap, Users } from "lucide-react";
+import { Menu, X, Sun, Moon, Monitor, LogIn, LogOut, Mic, Library, History as HistoryIcon, Tag, Crown, Search, LayoutDashboard, CalendarDays, Trophy, Zap, Users } from "lucide-react";
+import { LogoMark } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/ThemeProvider";
 import { Link, useLocation } from "wouter";
@@ -55,21 +56,22 @@ export function Navigation() {
     >
       <div className="container mx-auto px-4 md:px-6 flex items-center justify-between">
         {/* Logo */}
-        <div
-          className="flex items-center gap-2 cursor-pointer"
+        <button
+          type="button"
+          data-testid="button-logo-home"
+          className="flex items-center gap-2.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-md"
           onClick={() => scrollToSection("home")}
+          aria-label="DebateMastery home"
         >
-          <div className="bg-primary/10 p-2 rounded-lg">
-            <GraduationCap className="w-6 h-6 text-primary" />
-          </div>
+          <LogoMark size={36} />
           <span
-            className={`text-xl font-bold font-display ${
+            className={`text-xl font-bold font-display tracking-tight leading-none ${
               isDarkHero ? "text-white" : "text-primary"
             }`}
           >
-            DebateMastery
+            Debate<span className="text-accent">Mastery</span>
           </span>
-        </div>
+        </button>
 
         {/* Desktop Links */}
         <div className="hidden xl:flex items-center gap-3">
