@@ -16,6 +16,7 @@ import { registerBillingRoutes } from "./billing";
 import { registerResearchRoutes } from "./research";
 import { sendAdminLeadAlert, sendBookingConfirmation } from "./notify";
 import { seedCoaches } from "./seed";
+import { registerSessionRoutes } from "./sessions";
 
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "demo-admin";
 
@@ -185,6 +186,7 @@ export async function registerRoutes(
   });
 
   registerPracticeRoutes(app);
+  registerSessionRoutes(app);
   registerBillingRoutes(app);
   registerResearchRoutes(app);
 

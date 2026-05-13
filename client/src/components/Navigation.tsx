@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { Menu, X, GraduationCap, Sun, Moon, Monitor, LogIn, LogOut, Mic, Library, History as HistoryIcon, Tag, Crown, Search, LayoutDashboard, CalendarDays } from "lucide-react";
+import { Menu, X, GraduationCap, Sun, Moon, Monitor, LogIn, LogOut, Mic, Library, Tag, Crown, Search, LayoutDashboard, CalendarDays, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/ThemeProvider";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useCurrentSubscription } from "@/lib/plan";
+import { useQuery } from "@tanstack/react-query";
 
 export function Navigation() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -15,6 +16,10 @@ export function Navigation() {
   const onHome = location === "/";
   const { plan, subscription } = useCurrentSubscription();
   const onPaidPlan = subscription?.status === "active" && plan.id !== "free";
+  const sessionAuth = useQuery<{ email: string | null; signedIn: boolean }>({
+    queryKey: ["/api/auth/session"],
+  });
+  const signedIn = !!sessionAuth.data?.signedIn;
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
@@ -135,39 +140,17 @@ export function Navigation() {
             <Mic className="w-3.5 h-3.5" /> Practice
           </Link>
 
-          <Link
-            href="/pricing"
-            data-testid="nav-link-pricing"
-            className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
-              isDarkHero
-                ? "text-white/90 hover:text-white"
-                : "text-foreground/80 hover:text-foreground"
-            }`}
-          >
-            <Tag className="w-3.5 h-3.5" /> Pricing
-          </Link>
-
-          {onPaidPlan && (
-            <Link
-              href="/pricing"
-              data-testid="nav-plan-badge"
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-accent/10 text-accent text-[11px] font-bold uppercase tracking-wider hover:bg-accent/15 transition-colors"
-            >
-              <Crown className="w-3 h-3" /> {plan.name}
-            </Link>
-          )}
-
-          {user && (
+          {signedIn && (
             <Link
               href="/history"
               data-testid="nav-link-history"
-              className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-1.5 text-sm font-semibold transition-colors ${
                 isDarkHero
                   ? "text-white/90 hover:text-white"
                   : "text-foreground/80 hover:text-foreground"
               }`}
             >
-              <HistoryIcon className="w-3.5 h-3.5" /> My History
+              <Trophy className="w-3.5 h-3.5" /> My Practice
             </Link>
           )}
 
@@ -181,6 +164,18 @@ export function Navigation() {
             }`}
           >
             <CalendarDays className="w-3.5 h-3.5" /> Book a Coach
+          </Link>
+
+          <Link
+            href="/pricing"
+            data-testid="nav-link-pricing"
+            className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
+              isDarkHero
+                ? "text-white/90 hover:text-white"
+                : "text-foreground/80 hover:text-foreground"
+            }`}
+          >
+            <Tag className="w-3.5 h-3.5" /> Pricing
           </Link>
           {/* Theme Toggle */}
           <div className="flex items-center gap-1 rounded-full bg-muted p-1 border border-border">
@@ -321,14 +316,6 @@ export function Navigation() {
             <Search className="w-4 h-4" /> Research a Topic
           </Link>
           <Link
-            href="/dashboard"
-            data-testid="button-nav-dashboard"
-            onClick={() => setMobileMenuOpen(false)}
-            className="flex items-center gap-2 text-left text-lg font-semibold text-foreground py-2 border-b border-border/50"
-          >
-            <LayoutDashboard className="w-4 h-4" /> Dashboard
-          </Link>
-          <Link
             href="/practice"
             data-testid="button-nav-practice-bot"
             onClick={() => setMobileMenuOpen(false)}
@@ -336,6 +323,16 @@ export function Navigation() {
           >
             <Mic className="w-4 h-4" /> Practice Bot
           </Link>
+          {signedIn && (
+            <Link
+              href="/history"
+              data-testid="button-nav-history"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-2 text-left text-lg font-semibold text-foreground py-2 border-b border-border/50"
+            >
+              <Trophy className="w-4 h-4" /> My Practice
+            </Link>
+          )}
           <Link
             href="/pricing"
             data-testid="button-nav-pricing"
@@ -349,16 +346,6 @@ export function Navigation() {
               </span>
             )}
           </Link>
-          {user && (
-            <Link
-              href="/history"
-              data-testid="button-nav-history"
-              onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center gap-2 text-left text-lg font-medium text-foreground py-2 border-b border-border/50"
-            >
-              <HistoryIcon className="w-4 h-4" /> My History
-            </Link>
-          )}
           <Link
             href="/coaches"
             data-testid="button-nav-coaches"

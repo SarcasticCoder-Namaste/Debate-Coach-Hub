@@ -2,6 +2,7 @@ import {
   inquiries,
   practiceShares,
   practiceShareComments,
+  practiceSessions,
   subscriptions,
   researchBundles,
   users,
@@ -14,6 +15,7 @@ import {
   type PracticeShare,
   type InsertPracticeShareComment,
   type PracticeShareComment,
+  type PracticeSession,
   type Subscription,
   type InsertResearchBundle,
   type ResearchBundleRow,
@@ -37,6 +39,18 @@ export interface IStorage {
   getPracticeShare(id: string): Promise<PracticeShare | undefined>;
   deletePracticeShare(id: string): Promise<void>;
   listExpiredPracticeShares(now: Date): Promise<PracticeShare[]>;
+
+  createPracticeSession(
+    fields: Omit<PracticeSession, "createdAt">,
+  ): Promise<PracticeSession>;
+  listPracticeSessions(userEmail: string): Promise<PracticeSession[]>;
+  getPracticeSession(id: string): Promise<PracticeSession | undefined>;
+  updatePracticeSession(
+    id: string,
+    userEmail: string,
+    fields: Partial<Pick<PracticeSession, "title" | "isFavorite">>,
+  ): Promise<PracticeSession | undefined>;
+  deletePracticeSession(id: string, userEmail: string): Promise<PracticeSession | undefined>;
 
   getSubscription(subscriberId: string): Promise<Subscription | undefined>;
   upsertSubscription(
@@ -109,6 +123,53 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(practiceShares)
       .where(and(lt(practiceShares.expiresAt, now)));
+  }
+
+  async createPracticeSession(
+    fields: Omit<PracticeSession, "createdAt">,
+  ): Promise<PracticeSession> {
+    const [row] = await db.insert(practiceSessions).values(fields).returning();
+    return row;
+  }
+
+  async listPracticeSessions(userEmail: string): Promise<PracticeSession[]> {
+    return db
+      .select()
+      .from(practiceSessions)
+      .where(eq(practiceSessions.userEmail, userEmail))
+      .orderBy(desc(practiceSessions.createdAt));
+  }
+
+  async getPracticeSession(id: string): Promise<PracticeSession | undefined> {
+    const [row] = await db
+      .select()
+      .from(practiceSessions)
+      .where(eq(practiceSessions.id, id));
+    return row;
+  }
+
+  async updatePracticeSession(
+    id: string,
+    userEmail: string,
+    fields: Partial<Pick<PracticeSession, "title" | "isFavorite">>,
+  ): Promise<PracticeSession | undefined> {
+    const [row] = await db
+      .update(practiceSessions)
+      .set(fields)
+      .where(and(eq(practiceSessions.id, id), eq(practiceSessions.userEmail, userEmail)))
+      .returning();
+    return row;
+  }
+
+  async deletePracticeSession(
+    id: string,
+    userEmail: string,
+  ): Promise<PracticeSession | undefined> {
+    const [row] = await db
+      .delete(practiceSessions)
+      .where(and(eq(practiceSessions.id, id), eq(practiceSessions.userEmail, userEmail)))
+      .returning();
+    return row;
   }
 
   async getSubscription(subscriberId: string): Promise<Subscription | undefined> {

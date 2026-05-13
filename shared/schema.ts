@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, jsonb, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -428,6 +428,10 @@ export const researchRequestSchema = z.object({
 
 export type ResearchRequest = z.infer<typeof researchRequestSchema>;
 
+/* ------------------------------------------------------------------ */
+/*  Coaching & Leads                                                  */
+/* ------------------------------------------------------------------ */
+
 export const coaches = pgTable("coaches", {
   id: serial("id").primaryKey(),
   slug: text("slug").notNull().unique(),
@@ -498,3 +502,34 @@ export const insertPracticeShareCommentSchema = createInsertSchema(practiceShare
 
 export type PracticeShareComment = typeof practiceShareComments.$inferSelect;
 export type InsertPracticeShareComment = z.infer<typeof insertPracticeShareCommentSchema>;
+
+/* ------------------------------------------------------------------ */
+/*  Practice sessions — saved practice rounds for the dashboard       */
+/* ------------------------------------------------------------------ */
+
+export const practiceSessions = pgTable("practice_sessions", {
+  id: text("id").primaryKey(),
+  userEmail: text("user_email").notNull(),
+  title: text("title"),
+  topic: text("topic").notNull(),
+  side: text("side").notNull(),
+  format: text("format").notNull(),
+  durationSec: integer("duration_sec").notNull().default(0),
+  objectPath: text("object_path"),
+  mimeType: text("mime_type"),
+  sizeBytes: integer("size_bytes"),
+  hasMedia: boolean("has_media").notNull().default(false),
+  transcript: jsonb("transcript").$type<PracticeTurn[]>().notNull(),
+  feedback: jsonb("feedback").$type<FeedbackReport | null>(),
+  overallScore: integer("overall_score"),
+  isFavorite: boolean("is_favorite").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertPracticeSessionSchema = createInsertSchema(practiceSessions, {
+  transcript: z.array(practiceTurnSchema).min(1),
+  feedback: feedbackReportSchema.nullable().optional(),
+}).omit({ id: true, createdAt: true, userEmail: true });
+
+export type PracticeSession = typeof practiceSessions.$inferSelect;
+export type InsertPracticeSession = z.infer<typeof insertPracticeSessionSchema>;

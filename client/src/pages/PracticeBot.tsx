@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 import { type DebateTopic, FORMAT_LABELS, TOPICS } from "@shared/topics";
 import { motion, AnimatePresence } from "framer-motion";
 import { Navigation } from "@/components/Navigation";
@@ -21,7 +22,7 @@ import {
   Mic, MicOff, Video, VideoOff, Loader2, Sparkles, Download,
   Volume2, VolumeX, RotateCcw, ArrowLeft, Send, AlertTriangle, Gavel, Languages,
   FileText, Upload, X, BookOpen,
-  Share2, Copy, Check, CalendarDays,
+  Share2, Copy, Check, CalendarDays, Trophy, LogIn, BookmarkCheck,
   ChevronDown, ChevronUp, Clock, Lightbulb, Timer, Pause, Play,
   TrendingUp, ThumbsUp, AlertCircle, Gauge, MessageSquare, Layers, Target, Zap,
   ExternalLink, Quote,
@@ -283,6 +284,12 @@ export default function PracticeBot() {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareExpiresAt, setShareExpiresAt] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
+  const [savingToHistory, setSavingToHistory] = useState(false);
+  const [savedSessionId, setSavedSessionId] = useState<string | null>(null);
+  const sessionAuth = useQuery<{ email: string | null; signedIn: boolean }>({
+    queryKey: ["/api/auth/session"],
+  });
+  const isSignedIn = !!sessionAuth.data?.signedIn;
 
   // topic packet (session-only)
   const [packet, setPacket] = useState<PacketContext | null>(null);
@@ -891,8 +898,96 @@ export default function PracticeBot() {
     setShareUrl(null);
     setShareExpiresAt(null);
     setShareCopied(false);
+    setSavedSessionId(null);
     if (audioRef.current) audioRef.current.pause();
     setBotSpeaking(false);
+  }
+
+  /* ---------- save round to "My Practice" ---------- */
+  async function saveRoundToHistory() {
+    if (!isSignedIn || savingToHistory || history.length === 0) return;
+    if (savedSessionId) return;
+    setSavingToHistory(true);
+    try {
+      let objectPath: string | null = null;
+      let mimeType: string | null = null;
+      let sizeBytes: number | null = null;
+
+      if (savedBlob) {
+        const MAX = 50 * 1024 * 1024;
+        if (savedBlob.size > MAX) {
+          toast({
+            title: "Recording too large",
+            description: "We'll save the round without the recording (under 50 MB only).",
+            variant: "destructive",
+          });
+        } else {
+          const contentType = savedMime || savedBlob.type || "video/webm";
+          const initRes = await fetch("/api/practice/shares/init", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ contentType, size: savedBlob.size }),
+          });
+          if (!initRes.ok) throw new Error("Could not start upload");
+          const init = (await initRes.json()) as {
+            uploadURL: string;
+            objectPath: string;
+            uploadToken: string;
+          };
+          const putRes = await fetch(init.uploadURL, {
+            method: "PUT",
+            body: savedBlob,
+            headers: { "Content-Type": contentType },
+          });
+          if (!putRes.ok) throw new Error("Upload failed");
+          objectPath = init.objectPath;
+          mimeType = contentType.split(";")[0]?.trim() || "video/webm";
+          sizeBytes = savedBlob.size;
+        }
+      }
+
+      const totalDuration = history.reduce(
+        (acc, t) => acc + (typeof t.durationSec === "number" ? t.durationSec : 0),
+        0,
+      );
+
+      const res = await fetch("/api/practice/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          topic: activeTopic,
+          side,
+          format,
+          durationSec: Math.round(totalDuration),
+          objectPath,
+          mimeType,
+          sizeBytes,
+          transcript: history,
+          feedback: feedback ?? null,
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "Could not save session");
+      }
+      const { id } = (await res.json()) as { id: string };
+      setSavedSessionId(id);
+      queryClient.invalidateQueries({ queryKey: ["/api/practice/sessions"] });
+      toast({
+        title: "Saved to My Practice",
+        description: "Find this round on your dashboard.",
+      });
+    } catch (err) {
+      toast({
+        title: "Couldn't save round",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingToHistory(false);
+    }
   }
 
   /* ---------- save & share ---------- */
@@ -1788,6 +1883,72 @@ export default function PracticeBot() {
                 controls
                 className="w-full rounded-xl bg-black aspect-video"
               />
+            </Card>
+          )}
+
+          {/* Save round to My Practice */}
+          {history.length > 0 && (
+            <Card className="p-6 border-primary/30" data-testid="card-save-history">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Trophy className="w-5 h-5 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-display text-lg font-bold text-primary leading-tight">
+                    Save this round to My Practice
+                  </h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Track your score over time and re-watch the recording from
+                    your dashboard.
+                  </p>
+                </div>
+              </div>
+
+              {!isSignedIn ? (
+                <div
+                  className="rounded-lg bg-muted/50 border border-border p-4 flex flex-col sm:flex-row sm:items-center gap-3"
+                  data-testid="prompt-signin-save"
+                >
+                  <div className="text-sm text-foreground/85 flex-1">
+                    Sign in to save your transcript, recording, and scorecard so
+                    you can review them later.
+                  </div>
+                  <Link href="/signin" data-testid="link-signin-save">
+                    <Button className="bg-accent hover:bg-accent/90 text-white">
+                      <LogIn className="w-4 h-4 mr-2" /> Sign in to save
+                    </Button>
+                  </Link>
+                </div>
+              ) : savedSessionId ? (
+                <div
+                  className="flex flex-col sm:flex-row sm:items-center gap-3"
+                  data-testid="state-saved-history"
+                >
+                  <div className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                    <BookmarkCheck className="w-4 h-4" /> Saved to My Practice
+                  </div>
+                  <Link
+                    href="/history"
+                    data-testid="link-view-history"
+                    className="text-sm font-semibold text-accent hover:underline"
+                  >
+                    View dashboard →
+                  </Link>
+                </div>
+              ) : (
+                <Button
+                  data-testid="button-save-history"
+                  onClick={saveRoundToHistory}
+                  disabled={savingToHistory}
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                >
+                  {savingToHistory ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</>
+                  ) : (
+                    <><Trophy className="w-4 h-4 mr-2" /> Save to My Practice</>
+                  )}
+                </Button>
+              )}
             </Card>
           )}
 
