@@ -17,6 +17,8 @@ import Dashboard from "@/pages/Dashboard";
 import History from "@/pages/History";
 import Coaches from "@/pages/Coaches";
 import AdminLeads from "@/pages/AdminLeads";
+import Drills from "@/pages/Drills";
+import DrillRunner from "@/pages/DrillRunner";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -31,6 +33,9 @@ function Router() {
       <Route path="/pricing" component={Pricing} />
       <Route path="/research" component={Research} />
       <Route path="/research/:id" component={Research} />
+      <Route path="/drills" component={Drills} />
+      <Route path="/drills/:id" component={DrillRunner} />
+      <Route path="/drill" component={Drills} />
       <Route path="/my-research" component={Dashboard} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/history" component={History} />

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Menu, X, GraduationCap, Sun, Moon, Monitor, LogIn, LogOut, Mic, Library, Tag, Crown, Search, LayoutDashboard, CalendarDays, Trophy } from "lucide-react";
+import { Menu, X, GraduationCap, Sun, Moon, Monitor, LogIn, LogOut, Mic, Library, History as HistoryIcon, Tag, Crown, Search, LayoutDashboard, CalendarDays, Trophy, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/ThemeProvider";
 import { Link, useLocation } from "wouter";
@@ -114,6 +114,18 @@ export function Navigation() {
             }`}
           >
             <Search className="w-3.5 h-3.5" /> Research
+          </Link>
+
+          <Link
+            href="/drills"
+            data-testid="nav-link-drills"
+            className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors ${
+              isDarkHero
+                ? "text-white/90 hover:text-white"
+                : "text-foreground/80 hover:text-foreground"
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5" /> Drills
           </Link>
 
           <Link
@@ -314,6 +326,22 @@ export function Navigation() {
             className="flex items-center gap-2 text-left text-lg font-semibold text-foreground py-2 border-b border-border/50"
           >
             <Search className="w-4 h-4" /> Research a Topic
+          </Link>
+          <Link
+            href="/drills"
+            data-testid="button-nav-drills"
+            onClick={() => setMobileMenuOpen(false)}
+            className="flex items-center gap-2 text-left text-lg font-semibold text-foreground py-2 border-b border-border/50"
+          >
+            <Zap className="w-4 h-4" /> Drills
+          </Link>
+          <Link
+            href="/dashboard"
+            data-testid="button-nav-dashboard"
+            onClick={() => setMobileMenuOpen(false)}
+            className="flex items-center gap-2 text-left text-lg font-semibold text-foreground py-2 border-b border-border/50"
+          >
+            <LayoutDashboard className="w-4 h-4" /> Dashboard
           </Link>
           <Link
             href="/practice"
