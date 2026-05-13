@@ -53,6 +53,9 @@ function getOwnerKey(res: Response): string {
 //   anon:<hash> -> belongs to an anonymous browser cookie
 // When a signed-in user makes a request we always use their account key.
 // Anonymous packets that match their cookie hash get claimed on first hit.
+// Note: rows written before this prefix scheme stored a bare cookie hash and
+// were unreachable from the app. They were removed by the one-time cleanup in
+// scripts/cleanup-orphaned-research.ts.
 function userOwner(userId: number): string {
   return `user:${userId}`;
 }
