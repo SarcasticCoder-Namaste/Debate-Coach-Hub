@@ -10,6 +10,7 @@ import SignIn from "@/pages/SignIn";
 import PracticeBot from "@/pages/PracticeBot";
 import Topics from "@/pages/Topics";
 import TopicDetail from "@/pages/TopicDetail";
+import SharedClip from "@/pages/SharedClip";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -20,6 +21,7 @@ function Router() {
       <Route path="/practice" component={PracticeBot} />
       <Route path="/topics" component={Topics} />
       <Route path="/topics/:id" component={TopicDetail} />
+      <Route path="/share/:id" component={SharedClip} />
       <Route component={NotFound} />
     </Switch>
   );

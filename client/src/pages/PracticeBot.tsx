@@ -18,6 +18,7 @@ import {
   Mic, MicOff, Video, VideoOff, Loader2, Sparkles, Download,
   Volume2, RotateCcw, ArrowLeft, Send, AlertTriangle, Star,
   FileText, Upload, X, BookOpen,
+  Share2, Copy, Check,
 } from "lucide-react";
 
 type Side = "Aff" | "Neg";
@@ -204,6 +205,12 @@ export default function PracticeBot() {
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [liveTranscript, setLiveTranscript] = useState<string>("");
+  const [savedBlob, setSavedBlob] = useState<Blob | null>(null);
+  const [savedMime, setSavedMime] = useState<string>("");
+  const [sharing, setSharing] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareExpiresAt, setShareExpiresAt] = useState<string | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
 
   // topic packet (session-only)
   const [packet, setPacket] = useState<PacketContext | null>(null);
@@ -373,10 +380,17 @@ export default function PracticeBot() {
     const blob = await finished;
     const liveText = stopLiveTranscript();
 
-    // Save replayable video
-    if (cameraEnabled && blob.size > 0) {
-      if (videoUrl) URL.revokeObjectURL(videoUrl);
-      setVideoUrl(URL.createObjectURL(blob));
+    // Save replayable video / audio
+    if (blob.size > 0) {
+      setSavedBlob(blob);
+      setSavedMime(blob.type || (cameraEnabled ? "video/webm" : "audio/webm"));
+      setShareUrl(null);
+      setShareExpiresAt(null);
+      setShareCopied(false);
+      if (cameraEnabled) {
+        if (videoUrl) URL.revokeObjectURL(videoUrl);
+        setVideoUrl(URL.createObjectURL(blob));
+      }
     }
 
     // Prefer the browser's live transcript when available — it's already final.
@@ -567,8 +581,102 @@ export default function PracticeBot() {
     setLiveTranscript("");
     speechFinalRef.current = "";
     if (videoUrl) { URL.revokeObjectURL(videoUrl); setVideoUrl(null); }
+    setSavedBlob(null);
+    setSavedMime("");
+    setShareUrl(null);
+    setShareExpiresAt(null);
+    setShareCopied(false);
     if (audioRef.current) audioRef.current.pause();
     setBotSpeaking(false);
+  }
+
+  /* ---------- save & share ---------- */
+  async function saveAndShare() {
+    if (!savedBlob || sharing || history.length === 0) return;
+    const MAX = 50 * 1024 * 1024;
+    if (savedBlob.size > MAX) {
+      toast({
+        title: "Recording too large",
+        description: "Clips must be under 50 MB. Try a shorter speech.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSharing(true);
+    setShareCopied(false);
+    try {
+      const contentType = savedMime || savedBlob.type || "video/webm";
+      const initRes = await fetch("/api/practice/shares/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ contentType, size: savedBlob.size }),
+      });
+      if (!initRes.ok) {
+        const j = await initRes.json().catch(() => ({}));
+        throw new Error(j.error || "Could not start upload");
+      }
+      const { uploadURL, objectPath, uploadToken } = (await initRes.json()) as {
+        uploadURL: string;
+        objectPath: string;
+        uploadToken: string;
+      };
+
+      const putRes = await fetch(uploadURL, {
+        method: "PUT",
+        body: savedBlob,
+        headers: { "Content-Type": contentType },
+      });
+      if (!putRes.ok) throw new Error("Upload failed");
+
+      const finalizeRes = await fetch("/api/practice/shares", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          objectPath,
+          uploadToken,
+          mimeType: contentType.split(";")[0]?.trim() || "video/webm",
+          sizeBytes: savedBlob.size,
+          topic: activeTopic,
+          side,
+          format,
+          transcript: history,
+          feedback: feedback ?? null,
+        }),
+      });
+      if (!finalizeRes.ok) {
+        const j = await finalizeRes.json().catch(() => ({}));
+        throw new Error(j.error || "Could not save share");
+      }
+      const { url, expiresAt } = (await finalizeRes.json()) as {
+        url: string;
+        expiresAt: string | null;
+      };
+      const fullUrl = window.location.origin + url;
+      setShareUrl(fullUrl);
+      setShareExpiresAt(expiresAt);
+      toast({ title: "Clip saved", description: "Share the link with your coach." });
+    } catch (err) {
+      toast({
+        title: "Couldn't save clip",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSharing(false);
+    }
+  }
+
+  async function copyShareUrl() {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    } catch {
+      toast({ title: "Copy failed", description: "Select and copy the link manually.", variant: "destructive" });
+    }
   }
 
   /* ---------- render ---------- */
@@ -967,6 +1075,80 @@ export default function PracticeBot() {
                 controls
                 className="w-full rounded-xl bg-black aspect-video"
               />
+            </Card>
+          )}
+
+          {/* Save & share */}
+          {savedBlob && history.length > 0 && (
+            <Card className="p-6 border-accent/40" data-testid="card-share">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-accent/15 flex items-center justify-center flex-shrink-0">
+                  <Share2 className="w-5 h-5 text-accent" />
+                </div>
+                <div>
+                  <h3 className="font-display text-lg font-bold text-primary leading-tight">
+                    Send this clip to your coach
+                  </h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Upload your recording to a private link a coach can open in any browser. Links expire after 30 days.
+                  </p>
+                </div>
+              </div>
+
+              {!shareUrl ? (
+                <Button
+                  data-testid="button-save-share"
+                  onClick={saveAndShare}
+                  disabled={sharing}
+                  className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
+                >
+                  {sharing ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Uploading…</>
+                  ) : (
+                    <><Share2 className="w-4 h-4 mr-2" /> Save &amp; share clip</>
+                  )}
+                </Button>
+              ) : (
+                <div className="space-y-3" data-testid="share-result">
+                  <div className="flex gap-2">
+                    <input
+                      data-testid="input-share-url"
+                      readOnly
+                      value={shareUrl}
+                      onFocus={(e) => e.currentTarget.select()}
+                      className="flex-1 px-3 py-2 rounded-md border border-input bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <Button
+                      data-testid="button-copy-share"
+                      onClick={copyShareUrl}
+                      variant="outline"
+                      className="flex-shrink-0"
+                    >
+                      {shareCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                    <a
+                      href={shareUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-testid="link-open-share"
+                      className="text-primary hover:text-accent font-semibold"
+                    >
+                      Open viewer →
+                    </a>
+                    {shareExpiresAt ? (
+                      <span data-testid="text-share-expiry">
+                        Expires {new Date(shareExpiresAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                      </span>
+                    ) : (
+                      <span data-testid="text-share-expiry" className="text-emerald-600 dark:text-emerald-400">
+                        Saved to your account — no expiry
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
             </Card>
           )}
         </div>

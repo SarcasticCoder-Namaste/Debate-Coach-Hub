@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { GraduationCap, Mail, Lock, Eye, EyeOff, ArrowRight, Sparkles } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
 import { Button } from "@/components/ui/button";
@@ -14,18 +14,42 @@ export default function SignIn() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [showPw, setShowPw] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
+  const [, navigate] = useLocation();
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password || (mode === "signup" && !name)) {
       toast({ title: "Missing info", description: "Please fill in all fields.", variant: "destructive" });
       return;
     }
-    toast({
-      title: "Accounts coming soon",
-      description: "Sign-in is in setup. Book a free consult below to get early access.",
-    });
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/auth/signin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email, name: name || undefined }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "Sign in failed");
+      }
+      toast({
+        title: mode === "signup" ? "Welcome!" : "Signed in",
+        description: "Your practice clips will now be saved without a 30-day expiry.",
+      });
+      navigate("/practice");
+    } catch (err) {
+      toast({
+        title: "Sign in failed",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const googleSignIn = () => {
@@ -210,9 +234,10 @@ export default function SignIn() {
             <Button
               type="submit"
               data-testid="button-submit"
-              className="w-full h-12 rounded-xl bg-accent text-white hover:bg-accent/90 font-semibold flex items-center justify-center gap-2 shadow-lg shadow-accent/20 transition-all hover:-translate-y-0.5"
+              disabled={submitting}
+              className="w-full h-12 rounded-xl bg-accent text-white hover:bg-accent/90 font-semibold flex items-center justify-center gap-2 shadow-lg shadow-accent/20 transition-all hover:-translate-y-0.5 disabled:opacity-60"
             >
-              {mode === "signin" ? "Sign in" : "Create account"}
+              {submitting ? "Signing in…" : mode === "signin" ? "Sign in" : "Create account"}
               <ArrowRight className="w-4 h-4" />
             </Button>
           </form>

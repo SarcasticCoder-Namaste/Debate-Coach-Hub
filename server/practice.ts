@@ -1,10 +1,18 @@
 import type { Express, Request, Response } from "express";
 import { z } from "zod";
+import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import type {
   ChatCompletionMessageParam,
   ChatCompletionAudioParam,
 } from "openai/resources/chat/completions";
 import { openai, ensureCompatibleFormat, speechToText } from "./replit_integrations/audio/client";
+import { ObjectStorageService, ObjectNotFoundError } from "./replit_integrations/object_storage";
+import { storage } from "./storage";
+import {
+  feedbackPayloadSchema,
+  insertPracticeShareSchema,
+  turnSchema,
+} from "@shared/schema";
 
 const FORMAT_GUIDES: Record<string, string> = {
   LD: "Lincoln-Douglas (1-on-1, value debate, framework + contentions, ~6 min constructive).",
@@ -93,11 +101,6 @@ Return ONLY JSON matching this schema, no prose:
 }
 Be honest and specific. Base scores on the student's turns only, not the bot's.`;
 
-const turnSchema = z.object({
-  role: z.enum(["user", "assistant"]),
-  content: z.string(),
-});
-
 const transcribeSchema = z.object({ audio: z.string().min(1) });
 
 const respondSchema = z.object({
@@ -152,16 +155,131 @@ const feedbackSchema = z.object({
   transcript: z.array(turnSchema).min(1),
 });
 
-/**
- * Shape of a chat completion message that includes an audio response.
- * The Replit AI Integrations gpt-audio model returns this on the message.
- */
 interface AudioReplyMessage {
   content?: string | null;
   audio?: { transcript?: string; data?: string } | null;
 }
 
+/* ------------------ share-clip configuration ------------------ */
+
+const MAX_VIDEO_BYTES = 50 * 1024 * 1024; // 50 MB
+const SHARE_TTL_DAYS = 30;
+const UPLOAD_TOKEN_TTL_MS = 15 * 60 * 1000; // 15 min — matches presigned URL TTL
+const ALLOWED_MIME = new Set([
+  "video/webm",
+  "video/mp4",
+  "audio/webm",
+  "audio/mp4",
+  "audio/ogg",
+]);
+
+// Server secret used to bind a finalize call back to its init. We re-use
+// SESSION_SECRET if set, otherwise generate a per-process secret.
+const UPLOAD_SECRET =
+  process.env.SESSION_SECRET || randomBytes(32).toString("hex");
+
+function signUploadToken(payload: { objectPath: string; ip: string; exp: number }): string {
+  const body = `${payload.objectPath}|${payload.ip}|${payload.exp}`;
+  const sig = createHmac("sha256", UPLOAD_SECRET).update(body).digest("base64url");
+  return `${payload.exp}.${sig}`;
+}
+
+function verifyUploadToken(token: string, objectPath: string, ip: string): boolean {
+  const dot = token.indexOf(".");
+  if (dot <= 0) return false;
+  const exp = Number(token.slice(0, dot));
+  const sig = token.slice(dot + 1);
+  if (!Number.isFinite(exp) || exp < Date.now()) return false;
+  const expected = createHmac("sha256", UPLOAD_SECRET)
+    .update(`${objectPath}|${ip}|${exp}`)
+    .digest("base64url");
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  try {
+    return timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
+// Simple in-memory rate limiter per IP. Max N requests within window.
+type Bucket = { count: number; resetAt: number };
+function makeRateLimiter(max: number, windowMs: number) {
+  const buckets = new Map<string, Bucket>();
+  return (ip: string): boolean => {
+    const now = Date.now();
+    const b = buckets.get(ip);
+    if (!b || b.resetAt < now) {
+      buckets.set(ip, { count: 1, resetAt: now + windowMs });
+      return true;
+    }
+    if (b.count >= max) return false;
+    b.count += 1;
+    return true;
+  };
+}
+
+const limitInit = makeRateLimiter(20, 60 * 60 * 1000);     // 20 init / hr / IP
+const limitFinalize = makeRateLimiter(10, 60 * 60 * 1000); // 10 saves / hr / IP
+
+function clientIp(req: Request): string {
+  const fwd = req.headers["x-forwarded-for"];
+  if (typeof fwd === "string" && fwd.length > 0) return fwd.split(",")[0]!.trim();
+  return req.ip ?? req.socket?.remoteAddress ?? "unknown";
+}
+
+// URL-safe slug, ~10 chars (~60 bits of entropy).
+function makeSlug(): string {
+  return randomBytes(8)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "")
+    .slice(0, 10);
+}
+
+const initShareSchema = z.object({
+  contentType: z.string().min(1),
+  size: z.number().int().positive().max(MAX_VIDEO_BYTES),
+});
+
+const finalizeShareSchema = insertPracticeShareSchema.extend({
+  feedback: feedbackPayloadSchema.nullable().optional(),
+  uploadToken: z.string().min(10),
+});
+
+// Best-effort cleanup of expired shares. Runs at most every 5 min.
+let lastSweepAt = 0;
+async function deleteStoredObject(objSvc: ObjectStorageService, objectPath: string) {
+  try {
+    const file = await objSvc.getObjectEntityFile(objectPath);
+    await file.delete({ ignoreNotFound: true });
+  } catch (err) {
+    if (err instanceof ObjectNotFoundError) return;
+    console.error("deleteStoredObject error", err);
+  }
+}
+
+async function sweepExpired() {
+  const now = Date.now();
+  if (now - lastSweepAt < 5 * 60 * 1000) return;
+  lastSweepAt = now;
+  try {
+    const objSvc = new ObjectStorageService();
+    const expired = await storage.listExpiredPracticeShares(new Date());
+    for (const row of expired) {
+      await deleteStoredObject(objSvc, row.objectPath);
+      await storage.deletePracticeShare(row.id);
+    }
+  } catch (err) {
+    console.error("sweepExpired error", err);
+  }
+}
+
 export function registerPracticeRoutes(app: Express) {
+  const objSvc = new ObjectStorageService();
+
   // Transcribe an uploaded audio chunk (base64) to text.
   app.post("/api/practice/transcribe", async (req: Request, res: Response) => {
     const parsed = transcribeSchema.safeParse(req.body);
@@ -364,6 +482,170 @@ export function registerPracticeRoutes(app: Express) {
     } catch (err) {
       console.error("feedback error", err);
       res.status(500).json({ error: "Feedback generation failed" });
+    }
+  });
+
+  /* ------------------ Shareable practice clips ------------------ */
+
+  // Step 1: ask for a presigned upload URL for the recording.
+  app.post("/api/practice/shares/init", async (req: Request, res: Response) => {
+    if (!limitInit(clientIp(req))) {
+      return res.status(429).json({ error: "Too many uploads — please try again later." });
+    }
+    const parsed = initShareSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid file metadata" });
+    }
+    const { contentType, size } = parsed.data;
+    const baseType = contentType.split(";")[0]!.trim().toLowerCase();
+    if (!ALLOWED_MIME.has(baseType)) {
+      return res.status(415).json({ error: "Unsupported file type" });
+    }
+    if (size > MAX_VIDEO_BYTES) {
+      return res.status(413).json({ error: "File too large (max 50 MB)" });
+    }
+    try {
+      const uploadURL = await objSvc.getObjectEntityUploadURL();
+      const objectPath = objSvc.normalizeObjectEntityPath(uploadURL);
+      const exp = Date.now() + UPLOAD_TOKEN_TTL_MS;
+      const uploadToken = signUploadToken({ objectPath, ip: clientIp(req), exp });
+      res.json({ uploadURL, objectPath, uploadToken });
+    } catch (err) {
+      console.error("share init error", err);
+      res.status(500).json({ error: "Could not prepare upload" });
+    }
+  });
+
+  // Step 2: finalize after the upload completes — store the share record.
+  app.post("/api/practice/shares", async (req: Request, res: Response) => {
+    if (!limitFinalize(clientIp(req))) {
+      return res.status(429).json({ error: "Too many shares — please try again later." });
+    }
+    sweepExpired();
+
+    const body = {
+      ...req.body,
+      // id will be assigned server-side
+      id: req.body?.id ?? "_pending",
+    };
+    const parsed = finalizeShareSchema.safeParse(body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid share payload" });
+    }
+    const { objectPath, mimeType, sizeBytes, topic, side, format, transcript, feedback, uploadToken } = parsed.data;
+
+    // Bind this finalize back to the original init: the token is an HMAC over
+    // (objectPath | requester ip | exp), preventing path replay/misattribution.
+    if (!verifyUploadToken(uploadToken, objectPath, clientIp(req))) {
+      return res.status(403).json({ error: "Upload token invalid or expired" });
+    }
+
+    const baseType = mimeType.split(";")[0]!.trim().toLowerCase();
+    if (!ALLOWED_MIME.has(baseType)) {
+      return res.status(415).json({ error: "Unsupported file type" });
+    }
+    if (sizeBytes > MAX_VIDEO_BYTES) {
+      return res.status(413).json({ error: "File too large (max 50 MB)" });
+    }
+
+    // Verify the upload landed in our storage.
+    let realSize = sizeBytes;
+    try {
+      const file = await objSvc.getObjectEntityFile(objectPath);
+      const [meta] = await file.getMetadata();
+      const reported = Number(meta.size ?? 0);
+      if (!reported || reported > MAX_VIDEO_BYTES) {
+        return res.status(413).json({ error: "Uploaded file too large" });
+      }
+      realSize = reported;
+    } catch (err) {
+      if (err instanceof ObjectNotFoundError) {
+        return res.status(400).json({ error: "Upload not found — try again" });
+      }
+      console.error("share verify error", err);
+      return res.status(500).json({ error: "Could not verify upload" });
+    }
+
+    const id = makeSlug();
+    // Signed-in users get clips that don't auto-expire; anonymous uploads
+    // are kept for 30 days then cleaned up by the lazy sweep.
+    const isSignedIn = !!req.session?.userEmail;
+    const expiresAt = isSignedIn
+      ? null
+      : new Date(Date.now() + SHARE_TTL_DAYS * 24 * 60 * 60 * 1000);
+    try {
+      const row = await storage.createPracticeShare({
+        id,
+        objectPath,
+        mimeType: baseType,
+        sizeBytes: realSize,
+        topic,
+        side,
+        format,
+        transcript,
+        feedback: feedback ?? null,
+        expiresAt,
+      });
+      res.status(201).json({
+        id: row.id,
+        url: `/share/${row.id}`,
+        expiresAt: row.expiresAt,
+      });
+    } catch (err) {
+      console.error("share create error", err);
+      res.status(500).json({ error: "Could not save share" });
+    }
+  });
+
+  // Public read of share metadata (transcript + feedback + video pointer).
+  app.get("/api/practice/shares/:id", async (req: Request, res: Response) => {
+    sweepExpired();
+    const id = String(req.params.id ?? "");
+    if (!/^[A-Za-z0-9_-]{6,16}$/.test(id)) {
+      return res.status(400).json({ error: "Invalid id" });
+    }
+    const row = await storage.getPracticeShare(id);
+    if (!row) return res.status(404).json({ error: "Not found" });
+    if (row.expiresAt && row.expiresAt.getTime() < Date.now()) {
+      await deleteStoredObject(objSvc, row.objectPath);
+      await storage.deletePracticeShare(row.id);
+      return res.status(410).json({ error: "This share has expired" });
+    }
+    res.json({
+      id: row.id,
+      mimeType: row.mimeType,
+      sizeBytes: row.sizeBytes,
+      topic: row.topic,
+      side: row.side,
+      format: row.format,
+      transcript: row.transcript,
+      feedback: row.feedback,
+      createdAt: row.createdAt,
+      expiresAt: row.expiresAt,
+      videoUrl: `/api/practice/shares/${row.id}/video`,
+    });
+  });
+
+  // Stream the recorded video/audio for a share.
+  app.get("/api/practice/shares/:id/video", async (req: Request, res: Response) => {
+    const id = String(req.params.id ?? "");
+    if (!/^[A-Za-z0-9_-]{6,16}$/.test(id)) {
+      return res.status(400).json({ error: "Invalid id" });
+    }
+    const row = await storage.getPracticeShare(id);
+    if (!row) return res.status(404).json({ error: "Not found" });
+    if (row.expiresAt && row.expiresAt.getTime() < Date.now()) {
+      return res.status(410).json({ error: "Expired" });
+    }
+    try {
+      const file = await objSvc.getObjectEntityFile(row.objectPath);
+      await objSvc.downloadObject(file, res, 60 * 60);
+    } catch (err) {
+      if (err instanceof ObjectNotFoundError) {
+        return res.status(404).json({ error: "File missing" });
+      }
+      console.error("share video error", err);
+      if (!res.headersSent) res.status(500).json({ error: "Could not stream video" });
     }
   });
 }

@@ -1,10 +1,35 @@
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
+import createMemoryStore from "memorystore";
+import { randomBytes } from "crypto";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 
 const app = express();
 const httpServer = createServer(app);
+
+const MemoryStore = createMemoryStore(session);
+const SESSION_SECRET = process.env.SESSION_SECRET || randomBytes(32).toString("hex");
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+app.set("trust proxy", 1);
+app.use(
+  session({
+    name: "dm.sid",
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    rolling: true,
+    store: new MemoryStore({ checkPeriod: 24 * 60 * 60 * 1000 }),
+    cookie: {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: SESSION_TTL_MS,
+    },
+  }),
+);
 
 declare module "http" {
   interface IncomingMessage {

@@ -1,9 +1,20 @@
-import { inquiries, type InsertInquiry, type Inquiry } from "@shared/schema";
+import {
+  inquiries,
+  practiceShares,
+  type InsertInquiry,
+  type Inquiry,
+  type InsertPracticeShare,
+  type PracticeShare,
+} from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { and, eq, lt } from "drizzle-orm";
 
 export interface IStorage {
   createInquiry(inquiry: InsertInquiry): Promise<Inquiry>;
+  createPracticeShare(share: InsertPracticeShare): Promise<PracticeShare>;
+  getPracticeShare(id: string): Promise<PracticeShare | undefined>;
+  deletePracticeShare(id: string): Promise<void>;
+  listExpiredPracticeShares(now: Date): Promise<PracticeShare[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -13,6 +24,27 @@ export class DatabaseStorage implements IStorage {
       .values(insertInquiry)
       .returning();
     return inquiry;
+  }
+
+  async createPracticeShare(share: InsertPracticeShare): Promise<PracticeShare> {
+    const [row] = await db.insert(practiceShares).values(share).returning();
+    return row;
+  }
+
+  async getPracticeShare(id: string): Promise<PracticeShare | undefined> {
+    const [row] = await db.select().from(practiceShares).where(eq(practiceShares.id, id));
+    return row;
+  }
+
+  async deletePracticeShare(id: string): Promise<void> {
+    await db.delete(practiceShares).where(eq(practiceShares.id, id));
+  }
+
+  async listExpiredPracticeShares(now: Date): Promise<PracticeShare[]> {
+    return db
+      .select()
+      .from(practiceShares)
+      .where(and(lt(practiceShares.expiresAt, now)));
   }
 }
 

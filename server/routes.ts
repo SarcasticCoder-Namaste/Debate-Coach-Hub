@@ -6,6 +6,7 @@ import { storage } from "./storage";
 import { insertInquirySchema } from "@shared/schema";
 import { TOPICS, getTopicById } from "@shared/topics";
 import { registerPracticeRoutes } from "./practice";
+import { registerAuthRoutes } from "./auth";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -103,6 +104,7 @@ export async function registerRoutes(
     res.json(topic);
   });
 
+  registerAuthRoutes(app);
   registerPracticeRoutes(app);
 
   app.post("/api/assistant/chat", async (req, res) => {
