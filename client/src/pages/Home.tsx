@@ -303,6 +303,16 @@ export default function Home() {
               >
                 Start Practicing Free
               </Button>
+              <Link href="/research" data-testid="link-hero-research">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="bg-transparent border-white/30 text-white hover:bg-white/10 text-lg h-14 px-8 rounded-xl backdrop-blur-sm w-full sm:w-auto"
+                >
+                  <Search className="w-5 h-5 mr-2 text-accent" />
+                  Research a Topic
+                </Button>
+              </Link>
               <Link href="/practice" data-testid="link-hero-practice-bot">
                 <Button
                   variant="outline"

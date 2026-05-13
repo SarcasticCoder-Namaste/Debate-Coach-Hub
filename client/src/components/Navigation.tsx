@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Menu, X, GraduationCap, Sun, Moon, Monitor, LogIn, Mic, Library, Tag, Crown } from "lucide-react";
+import { Menu, X, GraduationCap, Sun, Moon, Monitor, LogIn, Mic, Library, Tag, Crown, Search, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/ThemeProvider";
 import { Link, useLocation } from "wouter";
@@ -86,6 +86,18 @@ export function Navigation() {
           )}
 
           <Link
+            href="/dashboard"
+            data-testid="nav-link-dashboard"
+            className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors ${
+              isDarkHero
+                ? "text-white/90 hover:text-white"
+                : "text-foreground/80 hover:text-foreground"
+            }`}
+          >
+            <LayoutDashboard className="w-3.5 h-3.5" /> Dashboard
+          </Link>
+
+          <Link
             href="/topics"
             data-testid="nav-link-topics"
             className={`inline-flex items-center gap-1.5 text-sm font-semibold transition-colors ${
@@ -95,6 +107,30 @@ export function Navigation() {
             }`}
           >
             <Library className="w-3.5 h-3.5" /> Topics
+          </Link>
+
+          <Link
+            href="/research"
+            data-testid="nav-link-research"
+            className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors ${
+              isDarkHero
+                ? "text-white/90 hover:text-white"
+                : "text-foreground/80 hover:text-foreground"
+            }`}
+          >
+            <Search className="w-3.5 h-3.5" /> Research
+          </Link>
+
+          <Link
+            href="/dashboard"
+            data-testid="nav-link-dashboard"
+            className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors ${
+              isDarkHero
+                ? "text-white/90 hover:text-white"
+                : "text-foreground/80 hover:text-foreground"
+            }`}
+          >
+            <LayoutDashboard className="w-3.5 h-3.5" /> Dashboard
           </Link>
 
           <Link
@@ -241,12 +277,36 @@ export function Navigation() {
             </button>
           ))}
           <Link
+            href="/dashboard"
+            data-testid="button-nav-dashboard"
+            onClick={() => setMobileMenuOpen(false)}
+            className="flex items-center gap-2 text-left text-lg font-semibold text-foreground py-2 border-b border-border/50"
+          >
+            <LayoutDashboard className="w-4 h-4" /> Dashboard
+          </Link>
+          <Link
             href="/topics"
             data-testid="button-nav-topics"
             onClick={() => setMobileMenuOpen(false)}
             className="flex items-center gap-2 text-left text-lg font-semibold text-foreground py-2 border-b border-border/50"
           >
             <Library className="w-4 h-4" /> Topics
+          </Link>
+          <Link
+            href="/research"
+            data-testid="button-nav-research"
+            onClick={() => setMobileMenuOpen(false)}
+            className="flex items-center gap-2 text-left text-lg font-semibold text-foreground py-2 border-b border-border/50"
+          >
+            <Search className="w-4 h-4" /> Research a Topic
+          </Link>
+          <Link
+            href="/dashboard"
+            data-testid="button-nav-dashboard"
+            onClick={() => setMobileMenuOpen(false)}
+            className="flex items-center gap-2 text-left text-lg font-semibold text-foreground py-2 border-b border-border/50"
+          >
+            <LayoutDashboard className="w-4 h-4" /> Dashboard
           </Link>
           <Link
             href="/practice"

@@ -12,6 +12,8 @@ import Topics from "@/pages/Topics";
 import TopicDetail from "@/pages/TopicDetail";
 import SharedClip from "@/pages/SharedClip";
 import Pricing from "@/pages/Pricing";
+import Research from "@/pages/Research";
+import Dashboard from "@/pages/Dashboard";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -24,6 +26,10 @@ function Router() {
       <Route path="/topics/:id" component={TopicDetail} />
       <Route path="/share/:id" component={SharedClip} />
       <Route path="/pricing" component={Pricing} />
+      <Route path="/research" component={Research} />
+      <Route path="/research/:id" component={Research} />
+      <Route path="/my-research" component={Dashboard} />
+      <Route path="/dashboard" component={Dashboard} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -263,3 +263,101 @@ export const subscriptions = pgTable("subscriptions", {
 });
 
 export type Subscription = typeof subscriptions.$inferSelect;
+
+/* -------- Topic Research Assistant -------- */
+
+export const sideEnum = z.enum(["For", "Against", "Both"]);
+export const formatEnum = z.enum(["Generic", "PF", "LD", "Policy", "Parli"]);
+export const depthEnum = z.enum(["Quick", "Deep"]);
+export const stanceEnum = z.enum(["for", "against", "neutral"]);
+
+export const sourceItemSchema = z.object({
+  title: z.string(),
+  publisher: z.string(),
+  date: z.string().optional().default(""),
+  summary: z.string(),
+  url: z.string(),
+  stance: stanceEnum,
+});
+
+export const factItemSchema = z.object({
+  stat: z.string(),
+  source: z.string(),
+  url: z.string().optional().default(""),
+});
+
+export const quoteItemSchema = z.object({
+  quote: z.string(),
+  source: z.string(),
+  url: z.string().optional().default(""),
+});
+
+export const contentionSchema = z.object({
+  title: z.string(),
+  claim: z.string(),
+  warrant: z.string(),
+  evidence: z.array(quoteItemSchema).default([]),
+});
+
+export const oppositionSchema = z.object({
+  argument: z.string(),
+  rebuttalHint: z.string(),
+});
+
+export const termSchema = z.object({
+  term: z.string(),
+  kind: z.enum(["definition", "organization", "person"]),
+  description: z.string(),
+});
+
+export const researchBundleSchema = z.object({
+  overview: z.string(),
+  keyFacts: z.array(factItemSchema).default([]),
+  sources: z.array(sourceItemSchema).default([]),
+  evidenceQuotes: z.object({
+    for: z.array(quoteItemSchema).default([]),
+    against: z.array(quoteItemSchema).default([]),
+  }),
+  caseOutline: z.array(contentionSchema).default([]),
+  opposition: z.array(oppositionSchema).default([]),
+  keyTerms: z.array(termSchema).default([]),
+});
+
+export type ResearchBundle = z.infer<typeof researchBundleSchema>;
+
+export const researchSafetySchema = z.object({
+  level: z.enum(["ok", "warn", "refused"]),
+  message: z.string().optional().default(""),
+  suggestion: z.string().optional().default(""),
+});
+
+export type ResearchSafety = z.infer<typeof researchSafetySchema>;
+
+export const researchBundles = pgTable("research_bundles", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id"),
+  topic: text("topic").notNull(),
+  side: text("side").notNull(),
+  format: text("format").notNull(),
+  depth: text("depth").notNull(),
+  bundle: jsonb("bundle").notNull(),
+  safety: jsonb("safety").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertResearchBundleSchema = createInsertSchema(researchBundles).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type ResearchBundleRow = typeof researchBundles.$inferSelect;
+export type InsertResearchBundle = z.infer<typeof insertResearchBundleSchema>;
+
+export const researchRequestSchema = z.object({
+  topic: z.string().min(3).max(500),
+  side: sideEnum,
+  format: formatEnum.default("Generic"),
+  depth: depthEnum.default("Quick"),
+});
+
+export type ResearchRequest = z.infer<typeof researchRequestSchema>;

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { type DebateTopic, FORMAT_LABELS } from "@shared/topics";
+import { type DebateTopic, FORMAT_LABELS, TOPICS } from "@shared/topics";
 import { motion, AnimatePresence } from "framer-motion";
 import { Navigation } from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
@@ -21,9 +21,10 @@ import {
   Share2, Copy, Check,
   ChevronDown, ChevronUp, Clock, Lightbulb, Timer, Pause, Play,
   TrendingUp, ThumbsUp, AlertCircle, Gauge, MessageSquare, Layers, Target, Zap,
+  ExternalLink, Quote,
 } from "lucide-react";
 import { Paywall, useFeatureAccess } from "@/components/Paywall";
-import type { FeedbackReport } from "@shared/schema";
+import type { FeedbackReport, ResearchBundle } from "@shared/schema";
 
 type Side = "Aff" | "Neg";
 type FormatKey = "LD" | "PF" | "Policy" | "Parli" | "Congress" | "Worlds";
@@ -182,17 +183,40 @@ function SubScoreRow({
   );
 }
 
+interface SavedResearch {
+  id: number;
+  topic: string;
+  side: string;
+  format: string;
+  bundle: ResearchBundle;
+}
+
+function getQueryParams(): URLSearchParams {
+  if (typeof window === "undefined") return new URLSearchParams();
+  return new URLSearchParams(window.location.search);
+}
+
 export default function PracticeBot() {
   const { toast } = useToast();
 
+  const initialParams = useMemo(() => {
+    const p = getQueryParams();
+    return {
+      topic: p.get("topic") || "",
+      side: (p.get("side") === "Neg" ? "Neg" : p.get("side") === "Aff" ? "Aff" : null) as Side | null,
+      format: (["LD", "PF", "Policy"].includes(p.get("format") || "") ? (p.get("format") as FormatKey) : null),
+      researchId: p.get("researchId") ? Number(p.get("researchId")) : null,
+    };
+  }, []);
+
   // setup
   const initialTopicId = getQueryParam("topicId");
-  const initialSide = (getQueryParam("side") as Side | null) ?? "Aff";
-  const initialFormat = (getQueryParam("format") as FormatKey | null) ?? "LD";
-  const [topic, setTopic] = useState(FALLBACK_TOPICS[0]);
-  const [customTopic, setCustomTopic] = useState("");
-  const [side, setSide] = useState<Side>(initialSide);
-  const [format, setFormat] = useState<FormatKey>(initialFormat);
+  const [topic, setTopic] = useState(initialParams.topic && !TOPICS.some(t => t.resolution === initialParams.topic) ? initialParams.topic : initialParams.topic || TOPICS[0].resolution);
+  const [customTopic, setCustomTopic] = useState(
+    initialParams.topic && !TOPICS.some(t => t.resolution === initialParams.topic) ? initialParams.topic : ""
+  );
+  const [side, setSide] = useState<Side>(initialParams.side ?? "Aff");
+  const [format, setFormat] = useState<FormatKey>(initialParams.format ?? "LD");
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [activeTopicId, setActiveTopicId] = useState<string | null>(
     initialTopicId,
@@ -220,6 +244,15 @@ export default function PracticeBot() {
     setCustomTopic("");
     setFormat(t.format as FormatKey);
   }, [activeTopicId, libraryById]);
+
+  // prep packet
+  const researchQuery = useQuery<SavedResearch>({
+    queryKey: ["/api/research", initialParams.researchId],
+    enabled: !!initialParams.researchId,
+  });
+  const prep = researchQuery.data?.bundle ?? null;
+  const [prepOpen, setPrepOpen] = useState(true);
+  const [prepSection, setPrepSection] = useState<"sources" | "evidence" | "case">("sources");
 
   // round state
   const [history, setHistory] = useState<Turn[]>([]);
@@ -856,7 +889,25 @@ export default function PracticeBot() {
         <div className="lg:col-span-2 space-y-6">
           {/* Setup card */}
           <Card className="p-6">
-            <h2 className="font-display text-xl font-bold text-primary mb-4">Round Setup</h2>
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <h2 className="font-display text-xl font-bold text-primary">Round Setup</h2>
+              <Link
+                href="/research"
+                data-testid="link-setup-research"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border border-accent/40 bg-accent/10 text-accent hover-elevate active-elevate-2 transition-colors"
+              >
+                <BookOpen className="w-3.5 h-3.5" /> Research a Topic
+              </Link>
+            </div>
+            {initialParams.researchId && prep && (
+              <div className="mb-4 p-3 rounded-lg border border-accent/30 bg-accent/5 flex items-start gap-2 text-xs" data-testid="banner-prep-loaded">
+                <Sparkles className="w-3.5 h-3.5 text-accent flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-foreground">Prep packet loaded</p>
+                  <p className="text-muted-foreground mt-0.5">Sources, evidence, and your case outline are in the sidebar.</p>
+                </div>
+              </div>
+            )}
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">
                 <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 block">
@@ -906,13 +957,20 @@ export default function PracticeBot() {
                   placeholder="Or write your own resolution…"
                   className="mt-2 w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
-                <div className="mt-2">
+                <div className="mt-2 flex items-center justify-between">
                   <Link
                     href="/topics"
                     className="text-xs text-accent hover:underline font-semibold"
                     data-testid="link-browse-library"
                   >
                     Browse the full topic library →
+                  </Link>
+                  <Link
+                    href="/research"
+                    className="text-xs text-accent hover:underline font-semibold flex items-center gap-1"
+                    data-testid="link-research-topic"
+                  >
+                    <Sparkles className="w-3 h-3" /> Research a topic →
                   </Link>
                 </div>
               </div>
@@ -1481,8 +1539,103 @@ export default function PracticeBot() {
           )}
         </div>
 
-        {/* RIGHT: Transcript + feedback */}
+        {/* RIGHT: Prep packet + Transcript + feedback */}
         <div className="space-y-6">
+          {initialParams.researchId && (
+            <Card className="p-4 border-accent/40" data-testid="card-prep-packet">
+              <button
+                onClick={() => setPrepOpen((o) => !o)}
+                className="w-full flex items-center justify-between gap-2"
+                data-testid="button-toggle-prep-packet"
+              >
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-accent" />
+                  <span className="font-display text-sm font-bold text-primary">Prep Packet</span>
+                  {researchQuery.isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
+                </div>
+                {prepOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+              </button>
+
+              {prepOpen && prep && (
+                <div className="mt-3">
+                  <div className="flex gap-1 mb-3 border-b border-border">
+                    {([
+                      { k: "sources" as const, label: "Sources", icon: BookOpen },
+                      { k: "evidence" as const, label: "Evidence", icon: Quote },
+                      { k: "case" as const, label: "Case", icon: Target },
+                    ]).map(({ k, label, icon: Icon }) => (
+                      <button
+                        key={k}
+                        onClick={() => setPrepSection(k)}
+                        data-testid={`tab-prep-${k}`}
+                        className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold border-b-2 -mb-px transition-colors ${
+                          prepSection === k
+                            ? "border-accent text-accent"
+                            : "border-transparent text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <Icon className="w-3 h-3" /> {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="max-h-[320px] overflow-y-auto pr-1 space-y-2">
+                    {prepSection === "sources" && prep.sources.map((s, i) => (
+                      <a
+                        key={i}
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block p-2 rounded-md border border-border hover-elevate active-elevate-2"
+                        data-testid={`prep-source-${i}`}
+                      >
+                        <div className="flex items-start justify-between gap-1.5">
+                          <span className="text-xs font-semibold text-foreground leading-snug">{s.title}</span>
+                          <ExternalLink className="w-3 h-3 text-muted-foreground flex-shrink-0 mt-0.5" />
+                        </div>
+                        <div className="text-[10px] uppercase tracking-wider font-bold text-accent mt-0.5">
+                          {s.publisher} · <span className={s.stance === "for" ? "text-emerald-600 dark:text-emerald-400" : s.stance === "against" ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground"}>{s.stance}</span>
+                        </div>
+                      </a>
+                    ))}
+
+                    {prepSection === "evidence" && (
+                      <>
+                        {(["for", "against"] as const).map((st) => (
+                          <div key={st}>
+                            <div className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mt-1 mb-1.5">
+                              {st === "for" ? "For the resolution" : "Against the resolution"}
+                            </div>
+                            {prep.evidenceQuotes[st].map((q, i) => (
+                              <blockquote
+                                key={i}
+                                className={`text-xs italic border-l-2 pl-2 py-1 mb-1.5 ${st === "for" ? "border-emerald-500/50" : "border-rose-500/50"}`}
+                                data-testid={`prep-evidence-${st}-${i}`}
+                              >
+                                "{q.quote}" <span className="not-italic text-muted-foreground">— {q.source}</span>
+                              </blockquote>
+                            ))}
+                          </div>
+                        ))}
+                      </>
+                    )}
+
+                    {prepSection === "case" && prep.caseOutline.map((c, i) => (
+                      <div key={i} className="p-2 rounded-md border border-border" data-testid={`prep-contention-${i}`}>
+                        <div className="text-xs font-bold text-primary mb-0.5">Contention {i + 1}: {c.title}</div>
+                        <div className="text-xs text-foreground/80"><span className="font-semibold text-accent">Claim:</span> {c.claim}</div>
+                        <div className="text-xs text-foreground/80 mt-0.5"><span className="font-semibold text-accent">Warrant:</span> {c.warrant}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {prepOpen && !prep && !researchQuery.isLoading && (
+                <p className="text-xs text-muted-foreground mt-2">Couldn't load prep packet.</p>
+              )}
+            </Card>
+          )}
+
           <Card className="p-6">
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-display text-xl font-bold text-primary">Transcript</h2>

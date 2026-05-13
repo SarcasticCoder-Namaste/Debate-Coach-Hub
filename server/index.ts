@@ -54,30 +54,6 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
-const MemoryStore = createMemoryStore(session);
-const SESSION_SECRET =
-  process.env.SESSION_SECRET ||
-  process.env.REPL_ID ||
-  "debatemastery-dev-session-secret";
-
-app.set("trust proxy", 1);
-app.use(
-  session({
-    name: "dm.sid",
-    secret: SESSION_SECRET,
-    resave: false,
-    saveUninitialized: true,
-    rolling: true,
-    store: new MemoryStore({ checkPeriod: 24 * 60 * 60 * 1000 }),
-    cookie: {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-    },
-  }),
-);
-
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",

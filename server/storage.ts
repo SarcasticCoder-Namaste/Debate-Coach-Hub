@@ -2,14 +2,17 @@ import {
   inquiries,
   practiceShares,
   subscriptions,
+  researchBundles,
   type InsertInquiry,
   type Inquiry,
   type InsertPracticeShare,
   type PracticeShare,
   type Subscription,
+  type InsertResearchBundle,
+  type ResearchBundleRow,
 } from "@shared/schema";
 import { db } from "./db";
-import { and, eq, lt } from "drizzle-orm";
+import { and, eq, lt, desc, isNull } from "drizzle-orm";
 
 export interface IStorage {
   createInquiry(inquiry: InsertInquiry): Promise<Inquiry>;
@@ -32,6 +35,10 @@ export interface IStorage {
     minutes: number,
   ): Promise<Subscription>;
   rolloverMinutesIfNeeded(subscriberId: string): Promise<Subscription>;
+  createResearch(bundle: InsertResearchBundle): Promise<ResearchBundleRow>;
+  getResearch(id: number): Promise<ResearchBundleRow | undefined>;
+  listResearch(userId?: string | null): Promise<ResearchBundleRow[]>;
+  deleteResearch(id: number): Promise<void>;
 }
 
 function nextPeriodEnd(from: Date, interval: string): Date {
@@ -165,6 +172,36 @@ export class DatabaseStorage implements IStorage {
       return row;
     }
     return sub;
+  }
+
+  async createResearch(insert: InsertResearchBundle): Promise<ResearchBundleRow> {
+    const [row] = await db.insert(researchBundles).values(insert).returning();
+    return row;
+  }
+
+  async getResearch(id: number): Promise<ResearchBundleRow | undefined> {
+    const [row] = await db
+      .select()
+      .from(researchBundles)
+      .where(eq(researchBundles.id, id))
+      .limit(1);
+    return row;
+  }
+
+  async listResearch(userId?: string | null): Promise<ResearchBundleRow[]> {
+    const where = userId
+      ? eq(researchBundles.userId, userId)
+      : isNull(researchBundles.userId);
+    return db
+      .select()
+      .from(researchBundles)
+      .where(where)
+      .orderBy(desc(researchBundles.createdAt))
+      .limit(50);
+  }
+
+  async deleteResearch(id: number): Promise<void> {
+    await db.delete(researchBundles).where(eq(researchBundles.id, id));
   }
 }
 
