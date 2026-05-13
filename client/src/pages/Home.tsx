@@ -369,7 +369,7 @@ export default function Home() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75" />
                 <span className="relative inline-flex rounded-full h-3 w-3 bg-accent" />
               </span>
-              <span className="text-sm font-medium tracking-wide">Accepting New Students for Fall 2025</span>
+              <span className="text-sm font-medium tracking-wide" data-testid="badge-hero">AI-Powered Debate Coaching · Now in Beta</span>
             </motion.div>
 
             {/* Headline */}
@@ -383,8 +383,7 @@ export default function Home() {
 
             {/* Subtitle */}
             <motion.p variants={staggerChild} className="text-lg md:text-xl text-white/80 max-w-2xl mx-auto lg:mx-0 font-light leading-relaxed">
-              Professional coaching for competitive debaters and public speakers.
-              Unlock your potential with personalized strategies proven to win tournaments.
+              We coach with <span className="text-accent font-semibold">AI</span> — practice live rounds, get instant feedback on your arguments, delivery, and structure, and walk into tournaments ready to win.
             </motion.p>
 
             {/* CTAs */}
@@ -392,28 +391,31 @@ export default function Home() {
               <Button
                 onClick={scrollToContact}
                 size="lg"
-                className="bg-white text-primary hover:bg-white/90 text-lg h-14 px-8 rounded-xl shadow-xl shadow-black/10 transition-transform hover:-translate-y-1"
+                data-testid="button-hero-start-free"
+                className="bg-accent text-white hover:bg-accent/90 text-lg h-14 px-8 rounded-xl shadow-xl shadow-black/20 transition-transform hover:-translate-y-1"
               >
-                Book a Free Consultation
+                Start Practicing Free
               </Button>
               <Button
                 variant="outline"
                 size="lg"
+                data-testid="button-hero-how-it-works"
                 className="bg-transparent border-white/30 text-white hover:bg-white/10 text-lg h-14 px-8 rounded-xl backdrop-blur-sm"
-                onClick={() => scrollToSection("services")}
+                onClick={() => scrollToSection("how-it-works")}
               >
-                Explore Services
+                See How It Works
               </Button>
             </motion.div>
 
             {/* Trust badges */}
-            <motion.div variants={staggerChild} className="pt-6 flex items-center justify-center lg:justify-start gap-8 text-white/60">
+            <motion.div variants={staggerChild} className="pt-6 flex flex-wrap items-center justify-center lg:justify-start gap-x-6 gap-y-3 text-white/70">
               {[
-                ["State Finalist Coach", CheckCircle2],
-                ["10+ Years Experience", CheckCircle2],
+                ["No credit card required", CheckCircle2],
+                ["Built with debate champions", CheckCircle2],
+                ["Private & secure", ShieldCheck],
               ].map(([label, Icon]) => (
-                <div key={String(label)} className="flex items-center gap-2">
-                  <Icon className="w-5 h-5 text-accent" />
+                <div key={String(label)} className="flex items-center gap-2 text-sm">
+                  <Icon className="w-4 h-4 text-accent" />
                   <span>{String(label)}</span>
                 </div>
               ))}
@@ -442,74 +444,117 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ===================== ABOUT ===================== */}
+      {/* ===================== ABOUT — WE COACH WITH AI ===================== */}
       <Section id="about" className="py-24" bg="bg-background">
         <div className="max-w-3xl mx-auto text-center mb-16">
           <motion.span variants={fadeInUp} custom={0} className="text-accent font-bold tracking-wider uppercase text-sm">
-            About
+            How We're Different
           </motion.span>
           <motion.h2 variants={fadeInUp} custom={0.1} className="text-3xl md:text-5xl font-display font-bold text-primary mt-2 mb-4">
-            Meet Your Coach
+            We Coach With AI
           </motion.h2>
           <motion.div variants={fadeInUp} custom={0.15} className="h-1 w-20 bg-accent mx-auto rounded-full mb-6" />
           <motion.p variants={fadeInUp} custom={0.2} className="text-lg text-muted-foreground leading-relaxed">
-            I believe communication is the most powerful skill a young person can develop.
-            My coaching philosophy centers on finding your unique voice, not just winning arguments.
+            Built by debate champions, powered by AI. Practice anytime, get instant feedback, and walk in
+            confident — without waiting for your next session.
           </motion.p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-12 items-center">
-          {/* Portrait */}
-          <motion.div variants={fadeInLeft} custom={0.2} className="relative order-2 md:order-1">
-            <div className="aspect-square rounded-2xl overflow-hidden shadow-xl bg-muted max-w-md mx-auto">
-              <img
-                src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=1000&auto=format&fit=crop"
-                alt="Coach Portrait"
-                className="w-full h-full object-cover"
-              />
+        <div className="grid lg:grid-cols-5 gap-10 items-center">
+          {/* Visual */}
+          <motion.div variants={fadeInLeft} custom={0.2} className="lg:col-span-2 relative order-2 lg:order-1">
+            <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-primary via-primary to-accent/40 p-8 shadow-2xl aspect-square max-w-md mx-auto">
+              <div className="absolute inset-0 opacity-30 shimmer pointer-events-none" />
+              <div className="relative h-full flex flex-col justify-between text-white">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75" />
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-accent" />
+                  </span>
+                  <span className="text-xs uppercase tracking-widest font-semibold opacity-80">Live Coaching Session</span>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="bg-white/10 backdrop-blur p-3 rounded-2xl rounded-tl-sm border border-white/10">
+                    <p className="text-xs opacity-70 mb-1">You</p>
+                    <p className="text-sm">"Resolved: AI does more harm than good in education..."</p>
+                  </div>
+                  <div className="bg-accent/30 backdrop-blur p-3 rounded-2xl rounded-tr-sm border border-accent/30 ml-6">
+                    <p className="text-xs opacity-70 mb-1 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3" /> AI Coach
+                    </p>
+                    <p className="text-sm">Strong opener. Try sharpening your warrant — what evidence backs the harm claim?</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-white/10 rounded-xl p-2">
+                    <p className="text-xl font-bold">9.2</p>
+                    <p className="text-[10px] uppercase opacity-70">Clarity</p>
+                  </div>
+                  <div className="bg-white/10 rounded-xl p-2">
+                    <p className="text-xl font-bold">8.7</p>
+                    <p className="text-[10px] uppercase opacity-70">Structure</p>
+                  </div>
+                  <div className="bg-white/10 rounded-xl p-2">
+                    <p className="text-xl font-bold">7.9</p>
+                    <p className="text-[10px] uppercase opacity-70">Delivery</p>
+                  </div>
+                </div>
+              </div>
             </div>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
-              whileInView={{ opacity: 1, scale: 1 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.5, duration: 0.5 }}
-              className="absolute -bottom-6 -right-6 md:right-10 bg-card border border-border p-6 rounded-xl shadow-lg max-w-[200px]"
-            >
-              <p className="text-4xl font-bold text-accent font-display">
-                <AnimatedCounter value={150} />+
-              </p>
-              <p className="text-sm text-muted-foreground font-medium uppercase tracking-wide">Students Coached</p>
-            </motion.div>
           </motion.div>
 
-          {/* Credentials */}
-          <motion.div variants={fadeInRight} custom={0.2} className="space-y-8 order-1 md:order-2">
-            <div>
-              <h3 className="text-2xl font-bold text-primary mb-2">Academic & Coaching Credentials</h3>
-              <p className="text-muted-foreground">
-                Over a decade of experience in competitive debate formats including Lincoln-Douglas, Public Forum, and Policy Debate.
-              </p>
-            </div>
-
-            <motion.div variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true }} className="grid gap-6">
+          {/* Features list */}
+          <motion.div variants={fadeInRight} custom={0.2} className="lg:col-span-3 space-y-6 order-1 lg:order-2">
+            <motion.div variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true }} className="grid gap-4">
               {[
-                { icon: Trophy, title: "National Tournament Finalist", desc: "Top 10 speaker award at NSDA Nationals 2018" },
-                { icon: GraduationCap, title: "Former University Coach", desc: "Head Coach for State University Debate Society" },
-                { icon: Users, title: "Student Success", desc: "90% of long-term students break to elimination rounds" },
+                { icon: Mic, title: "Practice Real Rounds, Anytime", desc: "Speak any topic, any side. The AI listens, responds in real time, and pushes you with sharp counter-arguments." },
+                { icon: Sparkles, title: "Instant, Honest Feedback", desc: "Every round ends with scores on clarity, structure, evidence, and delivery — plus one specific tip to fix next." },
+                { icon: BookOpen, title: "Researched For You", desc: "Drop in a topic and get sources, evidence quotes, and a full case outline pulled from the live web in under 15 seconds." },
+                { icon: ShieldCheck, title: "Backed by Champion Coaches", desc: "Trained on real strategies from former NSDA finalists and university coaches — not generic chat scripts." },
               ].map((item, i) => (
                 <motion.div key={i} variants={staggerChild} className="flex gap-4 items-start p-4 rounded-xl hover:bg-muted/50 transition-colors border border-transparent hover:border-border">
-                  <div className="bg-primary/10 p-3 rounded-lg text-primary shrink-0">
+                  <div className="bg-accent/10 p-3 rounded-lg text-accent shrink-0">
                     <item.icon className="w-6 h-6" />
                   </div>
                   <div>
                     <h4 className="font-bold text-foreground text-lg">{item.title}</h4>
-                    <p className="text-sm text-muted-foreground">{item.desc}</p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
                   </div>
                 </motion.div>
               ))}
             </motion.div>
           </motion.div>
         </div>
+
+        {/* Trust stats row */}
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-50px" }}
+          className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-4"
+        >
+          {[
+            { id: "rounds", value: 12000, suffix: "+", label: "Practice rounds completed" },
+            { id: "recommend", value: 98, suffix: "%", label: "Students recommend us" },
+            { id: "availability", value: 24, suffix: "/7", label: "Available, no scheduling" },
+            { id: "speed", value: 60, suffix: "s", label: "From topic to first round" },
+          ].map((s) => (
+            <motion.div
+              key={s.label}
+              variants={staggerChild}
+              data-testid={`stat-card-${s.id}`}
+              className="p-6 rounded-2xl bg-gradient-to-br from-primary/5 to-accent/5 border border-border text-center"
+            >
+              <p className="text-3xl md:text-4xl font-bold text-primary font-display" data-testid={`stat-value-${s.id}`}>
+                <AnimatedCounter value={s.value} />{s.suffix}
+              </p>
+              <p className="text-xs md:text-sm text-muted-foreground mt-2 font-medium uppercase tracking-wide">{s.label}</p>
+            </motion.div>
+          ))}
+        </motion.div>
       </Section>
 
       {/* ===================== MARQUEE STRIP ===================== */}
@@ -521,11 +566,11 @@ export default function Home() {
         >
           {[...Array(10)].map((_, i) => (
             <span key={i} className="flex items-center gap-3">
-              <Trophy className="w-4 h-4" /> State Finalist Coach
+              <Sparkles className="w-4 h-4" /> AI-Powered Practice
               <Star className="w-4 h-4" /> 4.9/5 Student Rating
-              <ShieldCheck className="w-4 h-4" /> 90% Tournament Break Rate
-              <Award className="w-4 h-4" /> 150+ Students Coached
-              <Zap className="w-4 h-4" /> 10+ Years Experience
+              <ShieldCheck className="w-4 h-4" /> Built By Champion Coaches
+              <Zap className="w-4 h-4" /> Instant Feedback
+              <Award className="w-4 h-4" /> Topic Research Included
             </span>
           ))}
         </motion.div>
@@ -709,9 +754,9 @@ export default function Home() {
           className="grid md:grid-cols-3 gap-6"
         >
           {[
-            { name: "NSDA National Championship", date: "June 2025", loc: "Dallas, TX", tag: "Elite", icon: Trophy },
-            { name: "State Forensics Invitational", date: "October 2025", loc: "Statewide", tag: "Qualifying", icon: Award },
-            { name: "Holiday Classic Tournament", date: "December 2025", loc: "Virtual", tag: "Open", icon: CalendarDays },
+            { name: "NSDA National Championship", date: "June 2026", loc: "Phoenix, AZ", tag: "Elite", icon: Trophy },
+            { name: "State Forensics Invitational", date: "October 2026", loc: "Statewide", tag: "Qualifying", icon: Award },
+            { name: "Holiday Classic Tournament", date: "December 2026", loc: "Virtual", tag: "Open", icon: CalendarDays },
           ].map((t) => (
             <motion.div key={t.name} variants={staggerChild}>
               <SpotlightCard className="h-full p-6 rounded-2xl border border-border bg-card hover:shadow-xl transition-shadow group">

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Menu, X, GraduationCap, Sun, Moon, Monitor } from "lucide-react";
+import { Link } from "wouter";
+import { Menu, X, GraduationCap, Sun, Moon, Monitor, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/ThemeProvider";
 
@@ -102,16 +103,27 @@ export function Navigation() {
             </button>
           </div>
 
+          <Link
+            href="/signin"
+            data-testid="link-signin"
+            className={`text-sm font-medium hover:text-accent transition-colors flex items-center gap-1.5 ${
+              isDarkHero ? "text-white/90 hover:text-white" : "text-foreground/80 hover:text-foreground"
+            }`}
+          >
+            <LogIn className="w-4 h-4" />
+            Sign In
+          </Link>
+
           <Button
-            data-testid="button-free-consultation"
+            data-testid="button-start-free"
             onClick={() => scrollToSection("contact")}
             className={
               isDarkHero
-                ? "bg-white text-primary hover:bg-white/90 shadow-lg"
-                : "bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20"
+                ? "bg-accent text-white hover:bg-accent/90 shadow-lg shadow-black/20"
+                : "bg-accent hover:bg-accent/90 text-white shadow-lg shadow-accent/20"
             }
           >
-            Free Consultation
+            Start Free
           </Button>
         </div>
 
@@ -169,12 +181,21 @@ export function Navigation() {
               {item}
             </button>
           ))}
+          <Link
+            href="/signin"
+            data-testid="link-mobile-signin"
+            onClick={() => setMobileMenuOpen(false)}
+            className="w-full mt-2 inline-flex items-center justify-center h-10 rounded-md border border-border bg-background text-foreground text-sm font-medium hover:bg-muted transition-colors"
+          >
+            <LogIn className="w-4 h-4 mr-2" />
+            Sign In
+          </Link>
           <Button
             data-testid="button-book-session"
-            className="w-full mt-2 bg-primary text-white shadow-lg shadow-primary/25"
+            className="w-full bg-accent text-white shadow-lg shadow-accent/25"
             onClick={() => scrollToSection("contact")}
           >
-            Book a Session
+            Start Practicing Free
           </Button>
         </div>
       )}
