@@ -19,6 +19,7 @@ import {
   Volume2, RotateCcw, ArrowLeft, Send, AlertTriangle, Star,
   FileText, Upload, X, BookOpen,
   Share2, Copy, Check,
+  ChevronDown, ChevronUp, Clock, Lightbulb, Timer, Pause, Play,
 } from "lucide-react";
 
 type Side = "Aff" | "Neg";
@@ -231,6 +232,66 @@ export default function PracticeBot() {
   const speechFinalRef = useRef<string>("");
 
   const activeTopic = customTopic.trim() || topic;
+
+  // Briefing card uses the full topic when one is selected from the library.
+  const briefingTopic = activeTopicId && !customTopic.trim()
+    ? libraryById.get(activeTopicId) ?? null
+    : null;
+  const [briefingOpen, setBriefingOpen] = useState(true);
+
+  // Round timer (one-click preset from topic suggestedTime).
+  const [timerRemaining, setTimerRemaining] = useState<number | null>(null);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const timerIntervalRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!timerRunning || timerRemaining === null) return;
+    timerIntervalRef.current = window.setInterval(() => {
+      setTimerRemaining((r) => {
+        if (r === null) return r;
+        if (r <= 1) {
+          setTimerRunning(false);
+          return 0;
+        }
+        return r - 1;
+      });
+    }, 1000);
+    return () => {
+      if (timerIntervalRef.current) {
+        window.clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+    };
+  }, [timerRunning, timerRemaining]);
+
+  // Reset / hide the timer when the selected topic changes.
+  useEffect(() => {
+    setTimerRemaining(null);
+    setTimerRunning(false);
+  }, [activeTopicId]);
+
+  const presetMinutes = useMemo(() => {
+    if (!briefingTopic) return null;
+    const m = briefingTopic.suggestedTime.match(/(\d+)\s*min/i);
+    return m ? parseInt(m[1], 10) : null;
+  }, [briefingTopic]);
+
+  function startPresetTimer(mins: number) {
+    setTimerRemaining(mins * 60);
+    setTimerRunning(true);
+  }
+  function formatClock(secs: number) {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  }
+
+  const difficultyClass = (d?: string) =>
+    d === "Beginner"
+      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+      : d === "Advanced"
+      ? "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30"
+      : "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30";
 
   // Stop media tracks on unmount only.
   useEffect(() => {
@@ -818,6 +879,153 @@ export default function PracticeBot() {
               </div>
             </div>
           </Card>
+
+          {/* Topic briefing card (only when a library topic is selected) */}
+          {briefingTopic && (
+            <Card className="p-6" data-testid="card-topic-briefing">
+              <button
+                type="button"
+                onClick={() => setBriefingOpen((v) => !v)}
+                className="w-full flex items-start justify-between gap-3 text-left"
+                data-testid="button-toggle-briefing"
+                aria-expanded={briefingOpen}
+              >
+                <div className="min-w-0">
+                  <h2 className="font-display text-xl font-bold text-primary flex items-center gap-2">
+                    <Lightbulb className="w-5 h-5 text-accent" /> Topic Briefing
+                  </h2>
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <span
+                      data-testid="badge-difficulty"
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${difficultyClass(briefingTopic.difficulty)}`}
+                    >
+                      {briefingTopic.difficulty}
+                    </span>
+                    <span
+                      data-testid="text-suggested-time"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-primary/10 text-primary border border-primary/20"
+                    >
+                      <Clock className="w-3 h-3" /> {briefingTopic.suggestedTime}
+                    </span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted text-muted-foreground border border-border">
+                      {FORMAT_LABELS[briefingTopic.format]}
+                    </span>
+                  </div>
+                </div>
+                {briefingOpen ? (
+                  <ChevronUp className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-1" />
+                ) : (
+                  <ChevronDown className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-1" />
+                )}
+              </button>
+
+              {presetMinutes !== null && (
+                <div className="mt-4 flex flex-wrap items-center gap-3 p-3 rounded-lg bg-accent/10 border border-accent/30">
+                  <Timer className="w-4 h-4 text-accent flex-shrink-0" />
+                  <div className="text-sm flex-1 min-w-0">
+                    <div className="font-semibold text-foreground">
+                      {timerRemaining === null
+                        ? `${presetMinutes}-min speech timer`
+                        : (
+                          <span data-testid="text-timer-remaining" className="font-mono tabular-nums">
+                            {formatClock(timerRemaining)}
+                          </span>
+                        )}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Matches the suggested first speech length for this topic.
+                    </div>
+                  </div>
+                  {timerRemaining === null ? (
+                    <Button
+                      data-testid="button-start-timer"
+                      size="sm"
+                      onClick={() => startPresetTimer(presetMinutes)}
+                      className="bg-accent hover:bg-accent/90 text-accent-foreground"
+                    >
+                      <Play className="w-3.5 h-3.5 mr-1" /> Start {presetMinutes}-min timer
+                    </Button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Button
+                        data-testid="button-toggle-timer"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setTimerRunning((r) => !r)}
+                        disabled={timerRemaining === 0}
+                      >
+                        {timerRunning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                      </Button>
+                      <Button
+                        data-testid="button-reset-timer"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => { setTimerRunning(false); setTimerRemaining(null); }}
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {briefingOpen && (
+                <div className="mt-5 space-y-5" data-testid="briefing-body">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider font-bold text-primary mb-1">
+                      Background
+                    </div>
+                    <p className="text-sm text-foreground/90 leading-relaxed" data-testid="text-briefing-background">
+                      {briefingTopic.background}
+                    </p>
+                  </div>
+
+                  {briefingTopic.keyTerms.length > 0 && (
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider font-bold text-primary mb-2">
+                        Key terms
+                      </div>
+                      <ul className="space-y-2">
+                        {briefingTopic.keyTerms.map((kt, i) => (
+                          <li
+                            key={i}
+                            className="text-sm leading-relaxed"
+                            data-testid={`briefing-keyterm-${i}`}
+                          >
+                            <span className="font-semibold text-foreground">{kt.term}:</span>{" "}
+                            <span className="text-foreground/80">{kt.definition}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {briefingTopic.prepQuestions.length > 0 && (
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider font-bold text-primary mb-2">
+                        Prep questions
+                      </div>
+                      <ol className="text-sm text-foreground/90 space-y-1 list-decimal pl-5">
+                        {briefingTopic.prepQuestions.map((q, i) => (
+                          <li key={i} data-testid={`briefing-prep-${i}`}>{q}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
+
+                  <div className="pt-1">
+                    <Link
+                      href={`/topics/${briefingTopic.id}`}
+                      className="text-xs text-accent hover:underline font-semibold"
+                      data-testid="link-open-topic-detail"
+                    >
+                      Open full topic page →
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </Card>
+          )}
 
           {/* Topic packet card */}
           <Card className="p-6" data-testid="card-topic-packet">
