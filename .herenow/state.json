@@ -1,0 +1,10 @@
+{
+  "publishes": {
+    "united-monsoon-9tmh": {
+      "siteUrl": "https://united-monsoon-9tmh.here.now/",
+      "claimToken": "69c2ca0905956b71d84da7f0a3b9ef741039a775a9c057f1d699c1ef0f4dd5a7",
+      "claimUrl": "https://here.now/claim?slug=united-monsoon-9tmh&token=69c2ca0905956b71d84da7f0a3b9ef741039a775a9c057f1d699c1ef0f4dd5a7",
+      "expiresAt": "2026-06-17T12:31:17.102Z"
+    }
+  }
+}
