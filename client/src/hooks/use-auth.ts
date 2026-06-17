@@ -4,8 +4,24 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 export type AuthUser = { id: number; email: string; name: string | null; role?: "student" | "coach" };
 
 export function useAuth() {
-  const { data, isLoading } = useQuery<{ user: AuthUser | null }>({
+  const { data, isLoading, isError } = useQuery<{ user: AuthUser | null }>({
     queryKey: ["/api/auth/me"],
+    queryFn: async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      try {
+        const res = await fetch("/api/auth/me", {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        if (res.status === 401 || !res.ok) return { user: null };
+        return res.json() as Promise<{ user: AuthUser | null }>;
+      } catch {
+        return { user: null };
+      } finally {
+        clearTimeout(timeout);
+      }
+    },
   });
 
   const signIn = useMutation({
@@ -41,5 +57,5 @@ export function useAuth() {
     },
   });
 
-  return { user: data?.user ?? null, isLoading, signIn, signUp, signOut };
+  return { user: data?.user ?? null, isLoading: isLoading && !isError, signIn, signUp, signOut };
 }
