@@ -61,7 +61,7 @@ export function Navigation() {
           data-testid="button-logo-home"
           className="flex items-center gap-2.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-md"
           onClick={() => scrollToSection("home")}
-          aria-label="DebateMastery home"
+          aria-label="Orator home"
         >
           <LogoMark size={36} />
           <span
@@ -69,7 +69,7 @@ export function Navigation() {
               isDarkHero ? "text-white" : "text-primary"
             }`}
           >
-            Debate<span className="text-accent">Mastery</span>
+            Ora<span className="text-accent">tor</span>
           </span>
         </button>
 

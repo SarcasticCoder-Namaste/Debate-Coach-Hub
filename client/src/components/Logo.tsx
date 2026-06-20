@@ -9,7 +9,7 @@ type LogoProps = {
 };
 
 /**
- * DebateMastery brand mark.
+ * Orator brand mark.
  * - Rounded-square shield in deep navy with a soft inner highlight
  * - Stylized "speech-arc M" formed by two rising waveform peaks (debate voices in dialogue)
  * - Accent dot above the right peak doubles as a microphone tip / "live" indicator
@@ -24,13 +24,13 @@ export function LogoMark({ size = 36, className }: { size?: number; className?: 
       height={size}
       className={cn("flex-shrink-0", className)}
       role="img"
-      aria-label="DebateMastery logomark"
+      aria-label="Orator logomark"
       data-testid="img-logo-mark"
     >
       <defs>
         <linearGradient id={`${id}-bg`} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#13224a" />
-          <stop offset="100%" stopColor="#0b1530" />
+          <stop offset="0%" stopColor="#1e1260" />
+          <stop offset="100%" stopColor="#0e0933" />
         </linearGradient>
         <linearGradient id={`${id}-stroke`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
@@ -67,14 +67,14 @@ export function LogoMark({ size = 36, className }: { size?: number; className?: 
       />
 
       {/* Accent mic / "live" dot above right peak */}
-      <circle cx="28" cy="9.5" r="2" fill="#c4413c" />
-      <circle cx="28" cy="9.5" r="2" fill="#c4413c" opacity="0.35">
+      <circle cx="28" cy="9.5" r="2" fill="#f59e0b" />
+      <circle cx="28" cy="9.5" r="2" fill="#f59e0b" opacity="0.35">
         <animate attributeName="r" values="2;3.2;2" dur="2.2s" repeatCount="indefinite" />
         <animate attributeName="opacity" values="0.35;0;0.35" dur="2.2s" repeatCount="indefinite" />
       </circle>
 
       {/* Rostrum / baseline accent */}
-      <rect x="7" y="30.5" width="22" height="2" rx="1" fill="#c4413c" />
+      <rect x="7" y="30.5" width="22" height="2" rx="1" fill="#f59e0b" />
       <rect x="7" y="30.5" width="9" height="2" rx="1" fill="#ffffff" opacity="0.25" />
     </svg>
   );

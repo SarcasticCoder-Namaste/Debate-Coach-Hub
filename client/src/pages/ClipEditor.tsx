@@ -482,7 +482,7 @@ export default function ClipEditor() {
 
                 <div className="flex items-center justify-between rounded-md border border-border p-3">
                   <div>
-                    <div className="text-sm font-semibold text-foreground">DebateMastery watermark</div>
+                    <div className="text-sm font-semibold text-foreground">Orator watermark</div>
                     <div className="text-xs text-muted-foreground">Bottom-right corner. Recommended.</div>
                   </div>
                   <Switch checked={overlayWatermark} onCheckedChange={setOverlayWatermark} data-testid="switch-overlay-watermark" />

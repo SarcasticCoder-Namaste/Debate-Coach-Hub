@@ -73,7 +73,7 @@ export default function SignIn() {
         <Link href="/" data-testid="link-home-logo">
           <span className="relative z-10 flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
             <GraduationCap className="w-8 h-8" />
-            <span className="text-2xl font-bold font-display">DebateMastery</span>
+            <span className="text-2xl font-bold font-display">Orator</span>
           </span>
         </Link>
 
@@ -104,7 +104,7 @@ export default function SignIn() {
         </div>
 
         <p className="relative z-10 text-xs text-white/40">
-          © {new Date().getFullYear()} DebateMastery
+          © {new Date().getFullYear()} Orator
         </p>
       </div>
 
@@ -118,7 +118,7 @@ export default function SignIn() {
           <Link href="/" data-testid="link-mobile-logo">
             <span className="lg:hidden flex items-center gap-2 mb-8 text-primary cursor-pointer">
               <GraduationCap className="w-7 h-7" />
-              <span className="text-xl font-bold font-display">DebateMastery</span>
+              <span className="text-xl font-bold font-display">Orator</span>
             </span>
           </Link>
 

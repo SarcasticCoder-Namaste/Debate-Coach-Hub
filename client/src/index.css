@@ -5,28 +5,28 @@
 @tailwind utilities;
 
 :root {
-  /* Navy Blue Primary */
-  --primary: 220 50% 25%;
+  /* Deep Indigo Primary */
+  --primary: 248 65% 22%;
   --primary-foreground: 0 0% 100%;
 
-  /* Dark Red Accent */
-  --accent: 350 65% 45%;
-  --accent-foreground: 0 0% 100%;
+  /* Vivid Amber / Gold Accent */
+  --accent: 38 92% 50%;
+  --accent-foreground: 248 60% 12%;
 
-  /* Light Gray / Off-white backgrounds */
-  --background: 210 20% 98%;
-  --foreground: 220 20% 15%;
+  /* Warm near-white background */
+  --background: 250 35% 98%;
+  --foreground: 248 25% 12%;
 
   /* Cards and Surfaces */
   --card: 0 0% 100%;
-  --card-foreground: 220 20% 15%;
+  --card-foreground: 248 25% 12%;
 
-  --muted: 210 20% 94%;
-  --muted-foreground: 220 15% 45%;
+  --muted: 248 20% 93%;
+  --muted-foreground: 248 18% 46%;
 
-  --border: 220 15% 90%;
-  --input: 220 15% 90%;
-  --ring: 220 50% 25%;
+  --border: 248 20% 88%;
+  --input: 248 20% 88%;
+  --ring: 248 65% 55%;
 
   --font-display: 'Playfair Display', serif;
   --font-body: 'Lato', sans-serif;
@@ -35,19 +35,19 @@
 }
 
 .dark {
-  --primary: 220 60% 65%;
-  --primary-foreground: 220 30% 10%;
-  --accent: 350 70% 55%;
-  --accent-foreground: 0 0% 100%;
-  --background: 220 25% 8%;
-  --foreground: 210 20% 95%;
-  --card: 220 20% 12%;
-  --card-foreground: 210 20% 95%;
-  --muted: 220 18% 18%;
-  --muted-foreground: 210 15% 60%;
-  --border: 220 15% 22%;
-  --input: 220 15% 22%;
-  --ring: 220 60% 65%;
+  --primary: 252 85% 73%;
+  --primary-foreground: 248 40% 8%;
+  --accent: 38 95% 56%;
+  --accent-foreground: 248 60% 10%;
+  --background: 246 42% 6%;
+  --foreground: 248 15% 93%;
+  --card: 248 32% 10%;
+  --card-foreground: 248 15% 93%;
+  --muted: 248 26% 15%;
+  --muted-foreground: 248 18% 60%;
+  --border: 248 22% 20%;
+  --input: 248 22% 20%;
+  --ring: 252 85% 73%;
 }
 
 @layer base {
@@ -74,12 +74,12 @@ html {
 
 /* Animated gradient text */
 .gradient-text {
-  background: linear-gradient(90deg, hsl(var(--accent)), hsl(10 80% 60%), hsl(var(--accent)));
-  background-size: 200% auto;
+  background: linear-gradient(90deg, hsl(var(--accent)), hsl(48 96% 60%), hsl(280 80% 72%), hsl(var(--accent)));
+  background-size: 250% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  animation: gradient-flow 4s linear infinite;
+  animation: gradient-flow 5s linear infinite;
 }
 
 @keyframes gradient-flow {
@@ -140,10 +140,10 @@ html {
 }
 .aurora {
   background:
-    radial-gradient(60% 40% at 20% 30%, hsl(var(--accent) / 0.55), transparent 60%),
-    radial-gradient(50% 35% at 80% 20%, hsl(220 80% 55% / 0.45), transparent 60%),
-    radial-gradient(45% 35% at 70% 75%, hsl(280 65% 55% / 0.40), transparent 60%),
-    radial-gradient(55% 40% at 30% 80%, hsl(10 75% 55% / 0.45), transparent 60%);
+    radial-gradient(60% 40% at 20% 30%, hsl(var(--accent) / 0.60), transparent 60%),
+    radial-gradient(50% 35% at 80% 20%, hsl(252 85% 62% / 0.50), transparent 60%),
+    radial-gradient(45% 35% at 70% 75%, hsl(280 70% 58% / 0.45), transparent 60%),
+    radial-gradient(55% 40% at 30% 80%, hsl(38 92% 60% / 0.40), transparent 60%);
   filter: blur(40px);
   animation: aurora-drift 28s linear infinite;
 }

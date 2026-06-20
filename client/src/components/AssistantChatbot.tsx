@@ -24,7 +24,7 @@ const GREETING: ChatMessage = {
   id: "greeting",
   role: "assistant",
   content:
-    "Hi! I'm your DebateMastery assistant. I can help you with three things:\n\n- **Get around the site** — point you to the right page or section.\n- **Coach you on debate** — arguments, rebuttals, structure, delivery.\n- **Answer general questions** about formats, tournaments, and study habits.\n\nAsk me anything, or pick a starter below.",
+    "Hi! I'm your Orator assistant. I can help you with three things:\n\n- **Get around the site** — point you to the right page or section.\n- **Coach you on debate** — arguments, rebuttals, structure, delivery.\n- **Answer general questions** about formats, tournaments, and study habits.\n\nAsk me anything, or pick a starter below.",
 };
 
 function uid() {

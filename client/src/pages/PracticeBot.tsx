@@ -1638,7 +1638,7 @@ export default function PracticeBot() {
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
                     </div>
                     <div className="ml-2 text-[11px] uppercase tracking-wider text-white/55 font-bold">
-                      DebateMastery · Live
+                      Orator · Live
                     </div>
                   </div>
 

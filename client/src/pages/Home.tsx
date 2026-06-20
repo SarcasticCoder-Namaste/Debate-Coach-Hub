@@ -906,6 +906,237 @@ export default function Home() {
         </motion.div>
       </Section>
 
+      {/* ===================== AI SCORE SHOWCASE ===================== */}
+      <section className="py-24 bg-primary relative overflow-hidden">
+        {/* Background texture */}
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)", backgroundSize: "28px 28px" }} />
+          <div className="orb orb-delay-1 absolute -top-32 -right-32 w-[500px] h-[500px] bg-accent/15 rounded-full blur-[100px]" />
+          <div className="orb orb-delay-3 absolute bottom-0 left-0 w-[400px] h-[400px] bg-white/5 rounded-full blur-[80px]" />
+        </div>
+
+        <div className="container mx-auto px-4 relative z-10">
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
+            {/* Left: copy */}
+            <motion.div
+              initial={{ opacity: 0, x: -40 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+              className="text-white space-y-6"
+            >
+              <span className="inline-block text-accent font-bold tracking-wider uppercase text-sm">AI Feedback Engine</span>
+              <h2 className="text-3xl md:text-5xl font-display font-bold leading-tight">
+                Real-time scores<br />after every round.
+              </h2>
+              <p className="text-white/70 text-lg leading-relaxed max-w-lg">
+                Orator's AI evaluates your speech across four dimensions — instantly. Know exactly what to fix before your next round, not after the tournament.
+              </p>
+              <ul className="space-y-3 text-white/80">
+                {[
+                  "Argument strength & logical structure",
+                  "Delivery: pace, clarity & filler words",
+                  "Evidence quality & sourcing",
+                  "Rebuttal depth & responsiveness",
+                ].map((item) => (
+                  <li key={item} className="flex items-start gap-3">
+                    <span className="mt-1 w-5 h-5 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
+                      <CheckCircle2 className="w-3 h-3 text-accent" />
+                    </span>
+                    <span className="text-sm">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </motion.div>
+
+            {/* Right: animated score card */}
+            <motion.div
+              initial={{ opacity: 0, x: 40 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.7, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <div className="bg-white/8 backdrop-blur-xl border border-white/12 rounded-3xl p-8 shadow-2xl space-y-6">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-white/50 text-xs uppercase tracking-widest font-semibold mb-1">Round Analysis</p>
+                    <h3 className="text-white font-display text-xl font-bold">Lincoln-Douglas — Affirmative</h3>
+                  </div>
+                  {/* Overall ring */}
+                  <div className="relative w-20 h-20 flex-shrink-0">
+                    <svg viewBox="0 0 80 80" className="w-20 h-20 -rotate-90">
+                      <circle cx="40" cy="40" r="32" fill="none" stroke="white" strokeOpacity="0.1" strokeWidth="7" />
+                      <motion.circle
+                        cx="40" cy="40" r="32"
+                        fill="none"
+                        stroke="#f59e0b"
+                        strokeWidth="7"
+                        strokeLinecap="round"
+                        strokeDasharray={`${2 * Math.PI * 32}`}
+                        initial={{ strokeDashoffset: 2 * Math.PI * 32 }}
+                        whileInView={{ strokeDashoffset: 2 * Math.PI * 32 * (1 - 0.86) }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 1.4, delay: 0.4, ease: "easeOut" }}
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-white font-bold text-xl leading-none">86</span>
+                      <span className="text-white/50 text-[10px]">/ 100</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Score bars */}
+                <div className="space-y-4">
+                  {[
+                    { label: "Arguments", score: 91, color: "from-violet-400 to-indigo-500" },
+                    { label: "Delivery", score: 78, color: "from-amber-400 to-orange-400" },
+                    { label: "Structure", score: 88, color: "from-emerald-400 to-teal-400" },
+                    { label: "Rebuttal", score: 82, color: "from-sky-400 to-blue-500" },
+                  ].map((item) => (
+                    <div key={item.label}>
+                      <div className="flex justify-between items-center mb-1.5">
+                        <span className="text-white/80 text-sm font-medium">{item.label}</span>
+                        <span className="text-white font-bold text-sm">{item.score}</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                        <motion.div
+                          className={`h-full rounded-full bg-gradient-to-r ${item.color}`}
+                          initial={{ width: 0 }}
+                          whileInView={{ width: `${item.score}%` }}
+                          viewport={{ once: true }}
+                          transition={{ duration: 1.2, delay: 0.3, ease: "easeOut" }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Feedback snippet */}
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-2">
+                  <p className="text-xs text-accent font-semibold uppercase tracking-wider">Top Suggestion</p>
+                  <p className="text-white/80 text-sm leading-relaxed">
+                    "Your value criterion was well-articulated, but slow down during the contention block — filler words ('um', 'like') appeared 7× and erode your credibility with judges."
+                  </p>
+                </div>
+
+                {/* Waveform footer */}
+                <div className="flex items-end justify-center gap-[3px] h-8 opacity-40">
+                  {[0.4, 0.7, 1, 0.6, 0.9, 0.5, 1, 0.75, 0.4, 0.85, 0.55, 1, 0.65, 0.45, 0.8].map((h, i) => (
+                    <div
+                      key={i}
+                      className="wave-bar w-1.5 rounded-full bg-accent"
+                      style={{ height: `${h * 100}%`, animationDelay: `${i * 0.11}s` }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* ===================== LIVE TRANSCRIPT PREVIEW ===================== */}
+      <Section id="transcript-preview" className="py-24" bg="bg-background">
+        <div className="text-center mb-14">
+          <motion.span variants={fadeInUp} custom={0} className="text-accent font-bold tracking-wider uppercase text-sm">
+            Live Practice Mode
+          </motion.span>
+          <motion.h2 variants={fadeInUp} custom={0.1} className="text-3xl md:text-5xl font-display font-bold text-primary mt-2 mb-4">
+            Your AI opponent. Anytime.
+          </motion.h2>
+          <motion.p variants={fadeInUp} custom={0.15} className="text-muted-foreground max-w-2xl mx-auto">
+            Orator's PracticeBot goes round-for-round with you — arguing, rebutting, and coaching in real time.
+          </motion.p>
+        </div>
+
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-50px" }}
+          className="max-w-3xl mx-auto space-y-4"
+        >
+          {[
+            {
+              role: "bot",
+              label: "Orator AI",
+              color: "bg-primary text-white",
+              bubble: "from-primary/10 to-primary/5 border-primary/20",
+              text: "Welcome to your Lincoln-Douglas practice round. Today's resolution: 'Resolved: The pursuit of scientific knowledge ought to be constrained by concerns for the well-being of non-human animals.' You'll be Affirmative. Ready to begin your 1AC?",
+            },
+            {
+              role: "user",
+              label: "You",
+              color: "bg-accent text-white",
+              bubble: "from-accent/10 to-accent/5 border-accent/20",
+              text: "I affirm the resolution. My value is Morality, with a criterion of Utilitarianism. Contention 1: Animal suffering is a morally relevant harm. When research causes unnecessary pain to sentient beings...",
+            },
+            {
+              role: "bot",
+              label: "Orator AI",
+              color: "bg-primary text-white",
+              bubble: "from-primary/10 to-primary/5 border-primary/20",
+              text: "Strong value-criterion link. I'll now run the negative — my value is Justice, criterion: Social Contract. The state has a duty to advance human knowledge for collective welfare, which outweighs individual animal suffering...",
+            },
+            {
+              role: "feedback",
+              label: "Instant Feedback",
+              color: "bg-emerald-500 text-white",
+              bubble: "from-emerald-500/10 to-emerald-500/5 border-emerald-500/20",
+              text: "✦ Delivery: You spoke at 182 wpm — ideal. ✦ Argument: Your link from suffering to morality is clear. Try pre-empting the Social Contract response in your next speech. ✦ Tip: Avoid 'um' — detected 3 times.",
+            },
+          ].map((msg, i) => (
+            <motion.div key={i} variants={staggerChild} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-[85%] ${msg.role === "user" ? "items-end" : "items-start"} flex flex-col gap-1`}>
+                <div className={`flex items-center gap-2 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
+                  <div className={`w-7 h-7 rounded-full ${msg.color} flex items-center justify-center text-xs font-bold flex-shrink-0 shadow`}>
+                    {msg.label[0]}
+                  </div>
+                  <span className="text-xs text-muted-foreground font-semibold">{msg.label}</span>
+                </div>
+                <div className={`p-4 rounded-2xl bg-gradient-to-br border ${msg.bubble} text-sm leading-relaxed text-foreground`}>
+                  {msg.text}
+                </div>
+              </div>
+            </motion.div>
+          ))}
+
+          {/* Typing indicator */}
+          <motion.div variants={staggerChild} className="flex justify-start">
+            <div className="flex items-center gap-2 ml-9">
+              <div className="px-5 py-3.5 rounded-2xl bg-primary/8 border border-primary/15 flex items-center gap-1.5">
+                {[0, 0.2, 0.4].map((d, i) => (
+                  <motion.div
+                    key={i}
+                    className="w-2 h-2 rounded-full bg-primary/50"
+                    animate={{ y: [0, -5, 0], opacity: [0.4, 1, 0.4] }}
+                    transition={{ duration: 0.9, delay: d, repeat: Infinity }}
+                  />
+                ))}
+              </div>
+              <span className="text-xs text-muted-foreground">Orator is preparing your cross-examination…</span>
+            </div>
+          </motion.div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.4, duration: 0.6 }}
+          className="text-center mt-10"
+        >
+          <Link href="/practice" data-testid="link-score-showcase-cta">
+            <Button size="lg" className="bg-primary text-white hover:bg-primary/90 h-13 px-8 rounded-xl shadow-lg transition-transform hover:-translate-y-1">
+              <Mic className="w-5 h-5 mr-2" />
+              Start a Practice Round
+            </Button>
+          </Link>
+        </motion.div>
+      </Section>
+
       {/* ===================== FAQ ===================== */}
       <Section id="faq" className="py-24" bg="bg-muted/40">
         <div className="max-w-3xl mx-auto text-center mb-10">
@@ -1054,7 +1285,7 @@ export default function Home() {
           </div>
 
           <p className="text-white/40 text-sm">
-            © {new Date().getFullYear()} DebateMastery Coaching. All rights reserved.
+            © {new Date().getFullYear()} Orator. All rights reserved.
           </p>
         </div>
       </footer>

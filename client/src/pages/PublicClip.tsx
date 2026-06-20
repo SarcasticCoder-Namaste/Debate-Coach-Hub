@@ -70,7 +70,7 @@ export default function PublicClip() {
     : "";
 
   const shareText = data
-    ? `${data.overlayName ? data.overlayName + " — " : ""}${data.topic} · debate highlight on @DebateMastery`
+    ? `${data.overlayName ? data.overlayName + " — " : ""}${data.topic} · debate highlight on @Orator`
     : "";
 
   async function copyLink() {
@@ -221,7 +221,7 @@ export default function PublicClip() {
               <div className="flex flex-col md:flex-row md:items-center gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 text-accent text-xs font-bold uppercase tracking-wider mb-2">
-                    <Mic className="w-4 h-4" /> Try DebateMastery
+                    <Mic className="w-4 h-4" /> Try Orator
                   </div>
                   <h3 className="font-display text-xl font-bold text-primary mb-1">
                     Run your own practice round, free.
