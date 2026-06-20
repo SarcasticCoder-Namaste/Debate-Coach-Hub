@@ -44,3 +44,14 @@ integrations = ["javascript_openai_ai_integrations:2.0.0", "javascript_object_st
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[userenv]
+
+[userenv.shared]
+VITE_FIREBASE_API_KEY = "AIzaSyC4OU4Mc0rP39x0UJITGqRznA-fEp7PAxk"
+VITE_FIREBASE_AUTH_DOMAIN = "orator-8b89f.firebaseapp.com"
+VITE_FIREBASE_PROJECT_ID = "orator-8b89f"
+VITE_FIREBASE_STORAGE_BUCKET = "orator-8b89f.firebasestorage.app"
+VITE_FIREBASE_MESSAGING_SENDER_ID = "977886349876"
+VITE_FIREBASE_APP_ID = "1:977886349876:web:6addfba62b198dd854d861"
+VITE_FIREBASE_MEASUREMENT_ID = "G-L802YJWFT1"
