@@ -160,7 +160,6 @@ import {
   insertJudgeSessionSchema,
   getSpeechOrder,
   type FillerHit,
-  type FeedbackReport,
   type JudgePersona,
   type SpeechPhase,
 } from "@shared/schema";

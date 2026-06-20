@@ -69,7 +69,7 @@ export function registerDrillRoutes(app: Express) {
   });
 
   app.get("/api/drills/:id", (req: Request, res: Response) => {
-    const drill = getDrillById(req.params.id);
+    const drill = getDrillById(req.params.id as string);
     if (!drill) return res.status(404).json({ error: "Drill not found" });
     res.json({
       id: drill.id,

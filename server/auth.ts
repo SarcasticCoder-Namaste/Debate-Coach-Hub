@@ -9,6 +9,7 @@ import { signinSchema, signupSchema, userPreferencesSchema, type User } from "@s
 declare module "express-session" {
   interface SessionData {
     userId?: number;
+    userEmail?: string;
   }
 }
 
