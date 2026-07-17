@@ -29,14 +29,14 @@ export default function SignIn() {
     }
     try {
       if (mode === "signin") {
-        await signIn.mutateAsync({ email, password });
+        await signIn.mutateAsync({ email: email.trim().toLowerCase(), password });
         toast({ title: "Welcome back", description: "You're signed in." });
       } else {
         if (password.length < 6) {
           toast({ title: "Password too short", description: "Use at least 6 characters.", variant: "destructive" });
           return;
         }
-        await signUp.mutateAsync({ email, password, name });
+        await signUp.mutateAsync({ email: email.trim().toLowerCase(), password, name: name.trim() });
         toast({
           title: "Account created",
           description: "Your practice rounds will now be saved and shared clips won't expire.",
@@ -45,13 +45,23 @@ export default function SignIn() {
       const next = new URLSearchParams(window.location.search).get("next");
       navigate(next && next.startsWith("/") ? next : "/practice");
     } catch (err: any) {
+      console.error("[SignIn] auth error:", err);
       const msg = String(err?.message || "");
-      const friendly = msg.includes("409")
+      const isNetworkError = msg === "Failed to fetch" || msg.includes("NetworkError") || msg.includes("network");
+      const friendly = isNetworkError
+        ? "Could not reach the server. Check your connection and try again."
+        : msg.includes("409")
         ? "An account with this email already exists."
         : msg.includes("401")
         ? "Incorrect email or password."
+        : msg.includes("400")
+        ? "Please enter a valid email and password."
         : "Something went wrong. Please try again.";
-      toast({ title: "Sign-in failed", description: friendly, variant: "destructive" });
+      toast({
+        title: mode === "signin" ? "Sign-in failed" : "Sign-up failed",
+        description: friendly,
+        variant: "destructive",
+      });
     }
   };
 
