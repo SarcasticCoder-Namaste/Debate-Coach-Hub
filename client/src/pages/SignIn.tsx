@@ -47,16 +47,18 @@ export default function SignIn() {
     } catch (err: any) {
       console.error("[SignIn] auth error:", err);
       const msg = String(err?.message || "");
-      const isNetworkError = msg === "Failed to fetch" || msg.includes("NetworkError") || msg.includes("network");
-      const friendly = isNetworkError
-        ? "Could not reach the server. Check your connection and try again."
-        : msg.includes("409")
-        ? "An account with this email already exists."
-        : msg.includes("401")
+      // throwIfResNotOk always formats errors as "STATUS: body"
+      const statusMatch = msg.match(/^(\d{3}):/);
+      const httpStatus = statusMatch ? Number(statusMatch[1]) : null;
+      const friendly = httpStatus === 401
         ? "Incorrect email or password."
-        : msg.includes("400")
-        ? "Please enter a valid email and password."
-        : "Something went wrong. Please try again.";
+        : httpStatus === 409
+        ? "An account with this email already exists."
+        : httpStatus === 400
+        ? "Please enter a valid email and password (minimum 6 characters)."
+        : httpStatus && httpStatus >= 500
+        ? "Server error. Please try again in a moment."
+        : "Could not reach the server. Check your connection and try again.";
       toast({
         title: mode === "signin" ? "Sign-in failed" : "Sign-up failed",
         description: friendly,
