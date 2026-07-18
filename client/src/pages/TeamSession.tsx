@@ -57,7 +57,6 @@ export default function TeamSession() {
       </div>
     );
   }
-  if (!user) return <Redirect to="/signin" />;
   if (!q.data) {
     return (
       <div className="min-h-screen bg-background">

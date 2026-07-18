@@ -72,7 +72,6 @@ export default function Dashboard() {
       </div>
     );
   }
-  if (!user) return <Redirect to="/signin?next=/my-research" />;
 
   return (
     <div className="min-h-screen bg-background font-body text-foreground">

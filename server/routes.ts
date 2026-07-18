@@ -322,11 +322,12 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/practice/rounds", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/practice/rounds", async (req: Request, res: Response) => {
     const parsed = savePracticeRoundSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "Invalid round data" });
+    if (!req.session.userId) return res.status(401).json({ error: "Sign in to save rounds" });
     try {
-      const round = await storage.createPracticeRound(req.session.userId!, {
+      const round = await storage.createPracticeRound(req.session.userId, {
         topic: parsed.data.topic,
         side: parsed.data.side,
         format: parsed.data.format,
@@ -340,9 +341,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/practice/rounds", requireAuth, async (req, res) => {
+  app.get("/api/practice/rounds", async (req, res) => {
+    if (!req.session.userId) return res.json([]);
     try {
-      const rounds = await storage.listPracticeRounds(req.session.userId!);
+      const rounds = await storage.listPracticeRounds(req.session.userId);
       res.json(rounds);
     } catch (err) {
       console.error("list rounds error", err);
@@ -350,18 +352,20 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/practice/rounds/:id", requireAuth, async (req, res) => {
+  app.get("/api/practice/rounds/:id", async (req, res) => {
+    if (!req.session.userId) return res.status(404).json({ error: "Not found" });
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
-    const round = await storage.getPracticeRound(req.session.userId!, id);
+    const round = await storage.getPracticeRound(req.session.userId, id);
     if (!round) return res.status(404).json({ error: "Not found" });
     res.json(round);
   });
 
-  app.delete("/api/practice/rounds/:id", requireAuth, async (req, res) => {
+  app.delete("/api/practice/rounds/:id", async (req, res) => {
+    if (!req.session.userId) return res.status(404).json({ error: "Not found" });
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
-    const ok = await storage.deletePracticeRound(req.session.userId!, id);
+    const ok = await storage.deletePracticeRound(req.session.userId, id);
     if (!ok) return res.status(404).json({ error: "Not found" });
     res.json({ ok: true });
   });

@@ -87,7 +87,6 @@ export default function Teams() {
       </div>
     );
   }
-  if (!user) return <Redirect to="/signin?next=/teams" />;
 
   const myAssignments = assignmentsQ.data?.assignments ?? [];
   const teams = teamsQ.data?.teams ?? [];

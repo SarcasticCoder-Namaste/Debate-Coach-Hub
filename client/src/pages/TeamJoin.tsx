@@ -42,9 +42,6 @@ export default function TeamJoin() {
       </div>
     );
   }
-  if (!user) {
-    return <Redirect to={`/signin?next=/teams/join/${code}`} />;
-  }
 
   return (
     <div className="min-h-screen bg-background font-body text-foreground">

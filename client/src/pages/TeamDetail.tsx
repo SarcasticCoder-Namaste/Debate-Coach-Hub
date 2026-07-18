@@ -120,7 +120,6 @@ export default function TeamDetail() {
       </div>
     );
   }
-  if (!user) return <Redirect to="/signin?next=/teams" />;
   if (!detailQ.data) {
     return (
       <div className="min-h-screen bg-background">
