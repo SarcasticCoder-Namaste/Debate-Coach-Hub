@@ -31,7 +31,7 @@ export function useAuth() {
     },
     onSuccess: (d) => {
       queryClient.setQueryData(["/api/auth/me"], { user: d.user });
-      queryClient.invalidateQueries({ queryKey: ["/api/research"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/research"] });
     },
   });
 
@@ -42,7 +42,7 @@ export function useAuth() {
     },
     onSuccess: (d) => {
       queryClient.setQueryData(["/api/auth/me"], { user: d.user });
-      queryClient.invalidateQueries({ queryKey: ["/api/research"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/research"] });
     },
   });
 
@@ -52,8 +52,8 @@ export function useAuth() {
     },
     onSuccess: () => {
       queryClient.setQueryData(["/api/auth/me"], { user: null });
-      queryClient.invalidateQueries({ queryKey: ["/api/practice/rounds"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/research"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/practice/rounds"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/research"] });
     },
   });
 
