@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link, useLocation } from "wouter";
-import { GraduationCap, Mail, Lock, Eye, EyeOff, ArrowRight, Sparkles, Loader2 } from "lucide-react";
+import { GraduationCap, Mail, Lock, Eye, EyeOff, ArrowRight, Sparkles, Loader2, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -15,10 +15,10 @@ export default function SignIn() {
   const [name, setName] = useState("");
   const [showPw, setShowPw] = useState(false);
   const { toast } = useToast();
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, signInAsGuest } = useAuth();
   const [, navigate] = useLocation();
 
-  const pending = signIn.isPending || signUp.isPending;
+  const pending = signIn.isPending || signUp.isPending || signInAsGuest.isPending;
 
 
   const submit = async (e: React.FormEvent) => {
@@ -62,6 +62,20 @@ export default function SignIn() {
       toast({
         title: mode === "signin" ? "Sign-in failed" : "Sign-up failed",
         description: friendly,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleGuestLogin = async () => {
+    try {
+      await signInAsGuest.mutateAsync();
+      const next = new URLSearchParams(window.location.search).get("next");
+      navigate(next && next.startsWith("/") ? next : "/practice");
+    } catch {
+      toast({
+        title: "Guest login failed",
+        description: "Could not start a guest session. Please try again.",
         variant: "destructive",
       });
     }
@@ -261,10 +275,30 @@ export default function SignIn() {
             </button>
           </p>
 
-          <p className="text-center text-sm text-muted-foreground mt-4">
-            <Link href="/practice" data-testid="link-practice-anonymous" className="hover:underline">
-              Or continue without an account →
-            </Link>
+          <div className="flex items-center gap-3 my-2">
+            <div className="flex-1 h-px bg-border" />
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">or</span>
+            <div className="flex-1 h-px bg-border" />
+          </div>
+
+          <button
+            type="button"
+            onClick={handleGuestLogin}
+            disabled={pending}
+            data-testid="button-guest-login"
+            className="w-full flex items-center justify-center gap-2.5 h-12 rounded-xl border-2 border-dashed border-border bg-transparent hover:bg-muted text-foreground font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {signInAsGuest.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <>
+                <UserRound className="w-4 h-4 text-muted-foreground" />
+                Continue as Guest
+              </>
+            )}
+          </button>
+          <p className="text-center text-xs text-muted-foreground mt-1.5">
+            Full access — no account needed. Your session saves automatically.
           </p>
 
           <p className="text-center text-xs text-muted-foreground mt-8">

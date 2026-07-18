@@ -79,6 +79,23 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 }
 
 export function registerAuthRoutes(app: Express) {
+  app.post("/api/auth/guest", async (req, res) => {
+    try {
+      const guestEmail = `guest_${randomBytes(12).toString("hex")}@guest.orator`;
+      const user = await storage.createUser({
+        email: guestEmail,
+        name: "Guest",
+        passwordHash: hashPassword(randomBytes(16).toString("hex")),
+        role: "student",
+      });
+      req.session.userId = user.id;
+      res.status(201).json({ user: publicUser(user) });
+    } catch (err) {
+      console.error("guest login error", err);
+      res.status(500).json({ error: "Could not create guest session" });
+    }
+  });
+
   app.post("/api/auth/signup", async (req, res) => {
     const parsed = signupSchema.safeParse(req.body);
     if (!parsed.success) {

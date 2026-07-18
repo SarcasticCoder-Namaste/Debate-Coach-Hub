@@ -3,6 +3,10 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export type AuthUser = { id: number; email: string; name: string | null; role?: "student" | "coach" };
 
+export function isGuestUser(user: AuthUser | null | undefined): boolean {
+  return !!user?.email?.endsWith("@guest.orator");
+}
+
 export function useAuth() {
   const { data, isLoading, isError } = useQuery<{ user: AuthUser | null }>({
     queryKey: ["/api/auth/me"],
@@ -46,6 +50,16 @@ export function useAuth() {
     },
   });
 
+  const signInAsGuest = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", "/api/auth/guest");
+      return (await r.json()) as { user: AuthUser };
+    },
+    onSuccess: (d) => {
+      queryClient.setQueryData(["/api/auth/me"], { user: d.user });
+    },
+  });
+
   const signOut = useMutation({
     mutationFn: async () => {
       await apiRequest("POST", "/api/auth/signout");
@@ -57,5 +71,5 @@ export function useAuth() {
     },
   });
 
-  return { user: data?.user ?? null, isLoading: isLoading && !isError, signIn, signUp, signOut };
+  return { user: data?.user ?? null, isLoading: isLoading && !isError, signIn, signUp, signInAsGuest, signOut };
 }
