@@ -118,20 +118,6 @@ app.use((req, res, next) => {
 
   const port = parseInt(process.env.PORT || "5000", 10);
 
-  httpServer.on("error", (err: NodeJS.ErrnoException) => {
-    if (err.code === "EADDRINUSE") {
-      log(`Port ${port} busy — retrying in 1s…`);
-      setTimeout(() => {
-        httpServer.close();
-        httpServer.listen({ port, host: "0.0.0.0", reusePort: true }, () => {
-          log(`serving on port ${port}`);
-        });
-      }, 1000);
-    } else {
-      throw err;
-    }
-  });
-
   for (const sig of ["SIGTERM", "SIGINT"] as const) {
     process.on(sig, () => {
       httpServer.close(() => process.exit(0));
