@@ -38,6 +38,18 @@ function publicUser(u: User) {
   };
 }
 
+function saveAuthenticatedSession(req: Request, user: User): Promise<void> {
+  req.session.userId = user.id;
+  req.session.userEmail = user.email;
+
+  return new Promise((resolve, reject) => {
+    req.session.save((err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+}
+
 export function setupSession(app: Express) {
   const PgStore = connectPgSimple(session);
   const store = new PgStore({
@@ -88,7 +100,7 @@ export function registerAuthRoutes(app: Express) {
         passwordHash: hashPassword(randomBytes(16).toString("hex")),
         role: "student",
       });
-      req.session.userId = user.id;
+      await saveAuthenticatedSession(req, user);
       res.status(201).json({ user: publicUser(user) });
     } catch (err) {
       console.error("guest login error", err);
@@ -111,7 +123,7 @@ export function registerAuthRoutes(app: Express) {
         passwordHash: hashPassword(parsed.data.password),
         role: parsed.data.role ?? "student",
       });
-      req.session.userId = user.id;
+      await saveAuthenticatedSession(req, user);
       res.status(201).json({ user: publicUser(user) });
     } catch (err) {
       console.error("signup error", err);
@@ -127,7 +139,7 @@ export function registerAuthRoutes(app: Express) {
       if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) {
         return res.status(401).json({ error: "Incorrect email or password" });
       }
-      req.session.userId = user.id;
+      await saveAuthenticatedSession(req, user);
       res.json({ user: publicUser(user) });
     } catch (err) {
       console.error("signin error", err);

@@ -1,0 +1,1 @@
+- [Auth session persistence](auth-session-persistence.md) — save database-backed sessions before returning successful auth responses to avoid redirect races.
