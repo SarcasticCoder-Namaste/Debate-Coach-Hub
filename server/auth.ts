@@ -164,6 +164,23 @@ export function registerAuthRoutes(app: Express) {
     res.json({ user: publicUser(user) });
   });
 
+  // Keep the lightweight session shape used by the practice and clip pages.
+  // This must be a real API route so Vercel does not rewrite it to index.html.
+  app.get("/api/auth/session", async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!req.session.userId) {
+      return res.json({ email: null, signedIn: false });
+    }
+
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) {
+      req.session.destroy(() => {});
+      return res.json({ email: null, signedIn: false });
+    }
+
+    res.json({ email: user.email, signedIn: true });
+  });
+
   app.patch("/api/auth/preferences", async (req, res) => {
     if (!req.session.userId) {
       return res.status(401).json({ error: "Sign in required" });
