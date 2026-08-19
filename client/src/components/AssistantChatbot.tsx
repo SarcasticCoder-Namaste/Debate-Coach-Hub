@@ -204,7 +204,16 @@ export function AssistantChatbot() {
         signal: ctrl.signal,
       });
 
-      if (!res.ok || !res.body) throw new Error(`Request failed (${res.status})`);
+      if (!res.ok || !res.body) {
+        const body = await res.text().catch(() => "");
+        let detail = "";
+        try {
+          detail = body ? (JSON.parse(body).message || JSON.parse(body).error || "") : "";
+        } catch {
+          detail = body.slice(0, 160);
+        }
+        throw new Error(detail || `Assistant request failed (${res.status})`);
+      }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -238,7 +247,7 @@ export function AssistantChatbot() {
     } catch (e: unknown) {
       if (e instanceof DOMException && e.name === "AbortError") return;
       if (e instanceof Error && e.name === "AbortError") return;
-      setError("Something went wrong. Please try again.");
+      setError(e instanceof Error ? e.message : "The assistant could not connect. Please try again.");
       setMessages((curr) => curr.filter((m) => m.id !== assistantId));
     } finally {
       setStreaming(false);

@@ -137,8 +137,7 @@ export default function Drills() {
             signposting, and extemp speaking. Lower friction than a full round —
             built for daily habit.
           </p>
-          {signedIn && (
-            <div
+          <div
               className="mt-5 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/20"
               data-testid="badge-streak"
             >
@@ -159,7 +158,6 @@ export default function Drills() {
                 )}
               </span>
             </div>
-          )}
         </div>
       </section>
 

@@ -1091,7 +1091,7 @@ export function registerPracticeRoutes(app: Express) {
   app.post("/api/practice/judge-sessions", async (req: Request, res: Response) => {
     const email = req.session?.userEmail;
     if (!email) {
-      return res.status(401).json({ error: "Sign in to save judge sessions." });
+      return res.status(401).json({ error: "Session required to save judge sessions." });
     }
     const gate = await requireFeature(req, "judgeMode");
     if (!gate.ok) {

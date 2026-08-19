@@ -44,18 +44,6 @@ export const insertUserSchema = createInsertSchema(users).omit({
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 
-export const signupSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
-  name: z.string().min(1).optional(),
-  role: z.enum(USER_ROLES).optional(),
-});
-
-export const signinSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
-});
-
 export const practiceTurnSchema = z.object({
   role: z.enum(["user", "assistant"]),
   content: z.string(),

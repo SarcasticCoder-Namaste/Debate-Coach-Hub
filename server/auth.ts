@@ -1,10 +1,10 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
-import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
+import { randomBytes, scryptSync } from "crypto";
 import { pool } from "./db";
 import { storage } from "./storage";
-import { signinSchema, signupSchema, userPreferencesSchema, type User } from "@shared/schema";
+import { userPreferencesSchema, type User } from "@shared/schema";
 
 declare module "express-session" {
   interface SessionData {
@@ -17,15 +17,6 @@ function hashPassword(password: string): string {
   const salt = randomBytes(16).toString("hex");
   const hash = scryptSync(password, salt, 64).toString("hex");
   return `${salt}:${hash}`;
-}
-
-function verifyPassword(password: string, stored: string): boolean {
-  const [salt, hash] = stored.split(":");
-  if (!salt || !hash) return false;
-  const test = scryptSync(password, salt, 64);
-  const known = Buffer.from(hash, "hex");
-  if (test.length !== known.length) return false;
-  return timingSafeEqual(test, known);
 }
 
 function publicUser(u: User) {
@@ -85,7 +76,7 @@ export function setupSession(app: Express) {
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.userId) {
-    return res.status(401).json({ error: "Sign in required" });
+    return res.status(401).json({ error: "Session required" });
   }
   next();
 }
@@ -105,45 +96,6 @@ export function registerAuthRoutes(app: Express) {
     } catch (err) {
       console.error("guest login error", err);
       res.status(500).json({ error: "Could not create guest session" });
-    }
-  });
-
-  app.post("/api/auth/signup", async (req, res) => {
-    const parsed = signupSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: "Invalid email or password (min 6 chars)" });
-    }
-    const email = parsed.data.email.toLowerCase();
-    try {
-      const existing = await storage.getUserByEmail(email);
-      if (existing) return res.status(409).json({ error: "An account with this email already exists" });
-      const user = await storage.createUser({
-        email,
-        name: parsed.data.name ?? null,
-        passwordHash: hashPassword(parsed.data.password),
-        role: parsed.data.role ?? "student",
-      });
-      await saveAuthenticatedSession(req, user);
-      res.status(201).json({ user: publicUser(user) });
-    } catch (err) {
-      console.error("signup error", err);
-      res.status(500).json({ error: "Sign-up failed" });
-    }
-  });
-
-  app.post("/api/auth/signin", async (req, res) => {
-    const parsed = signinSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "Invalid request" });
-    try {
-      const user = await storage.getUserByEmail(parsed.data.email);
-      if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) {
-        return res.status(401).json({ error: "Incorrect email or password" });
-      }
-      await saveAuthenticatedSession(req, user);
-      res.json({ user: publicUser(user) });
-    } catch (err) {
-      console.error("signin error", err);
-      res.status(500).json({ error: "Sign-in failed" });
     }
   });
 
@@ -183,7 +135,7 @@ export function registerAuthRoutes(app: Express) {
 
   app.patch("/api/auth/preferences", async (req, res) => {
     if (!req.session.userId) {
-      return res.status(401).json({ error: "Sign in required" });
+      return res.status(401).json({ error: "Session required" });
     }
     const parsed = userPreferencesSchema.safeParse(req.body);
     if (!parsed.success) {

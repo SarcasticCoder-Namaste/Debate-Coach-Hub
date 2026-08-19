@@ -35,7 +35,7 @@ function requireUser(req: Request, res: Response): string | null {
   if (!email) {
     res
       .status(401)
-      .json({ error: "Sign in to save and view your practice rounds." });
+      .json({ error: "Session required to save and view practice rounds." });
     return null;
   }
   return email;

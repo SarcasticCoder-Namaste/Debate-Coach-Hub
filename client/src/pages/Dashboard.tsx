@@ -14,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useAuth } from "@/hooks/use-auth";
+import { useVisitorSession } from "@/hooks/use-visitor-session";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -39,7 +39,7 @@ function formatDate(d: string) {
 }
 
 export default function Dashboard() {
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading } = useVisitorSession();
   const { toast } = useToast();
   const [pendingDelete, setPendingDelete] = useState<SavedRow | null>(null);
   const { data, isLoading, isError } = useQuery<SavedRow[]>({

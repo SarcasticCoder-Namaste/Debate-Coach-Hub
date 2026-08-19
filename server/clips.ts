@@ -44,7 +44,7 @@ function requireEmail(req: Request, res: Response): string | null {
   if (!email) {
     res
       .status(401)
-      .json({ error: "Sign in to create or manage highlight clips." });
+      .json({ error: "Session required to create or manage highlight clips." });
     return null;
   }
   return email;

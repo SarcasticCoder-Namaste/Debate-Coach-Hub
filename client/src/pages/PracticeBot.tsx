@@ -12,7 +12,7 @@ import {
 import { motion, AnimatePresence, useReducedMotion, useMotionValue, useSpring, useTransform, animate } from "framer-motion";
 import { Navigation } from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/use-auth";
+import { useVisitorSession } from "@/hooks/use-visitor-session";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { History as HistoryIcon, CheckCircle2 } from "lucide-react";
 import {
@@ -27,7 +27,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Mic, MicOff, Video, VideoOff, Loader2, Sparkles, Download,
-  Volume2, VolumeX, RotateCcw, ArrowLeft, Send, AlertTriangle, Gavel, Languages, LogIn,
+  Volume2, VolumeX, RotateCcw, ArrowLeft, Send, AlertTriangle, Gavel, Languages,
   FileText, Upload, X, BookOpen,
   Share2, Copy, Check, CalendarDays, Trophy, BookmarkCheck, Mail,
   ChevronDown, ChevronUp, Clock, Lightbulb, Timer, Pause, Play,
@@ -258,9 +258,11 @@ function HeroTiltTile({
 
 export default function PracticeBot() {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user } = useVisitorSession();
   const prefersReducedMotion = useReducedMotion();
-  const displayName = (user?.name?.trim() || user?.email?.split("@")[0] || "Debater").split(/\s+/)[0];
+  const displayName = user?.name?.trim() && user.name !== "Guest"
+    ? user.name.split(/\s+/)[0]
+    : "Debater";
 
   // ===== Dynamic hero state (signed-in personalization) =====
   const { data: heroRounds = [] } = useQuery<Array<{ id: number; createdAt: string; format: string; side: string; topic: string; feedback: FeedbackReport | null }>>({
@@ -364,11 +366,6 @@ export default function PracticeBot() {
   const [currentPhaseIdx, setCurrentPhaseIdx] = useState(0);
   const [judgeSessionSavedId, setJudgeSessionSavedId] = useState<number | null>(null);
   const judgeAllowed = useFeatureAccess("judgeMode");
-
-  const { data: authSession } = useQuery<{ email: string | null; signedIn: boolean }>({
-    queryKey: ["/api/auth/session"],
-  });
-  const isSignedIn = !!authSession?.signedIn;
 
   // Speech order for current format/side (judge mode flow engine).
   const speechOrder = useMemo<SpeechPhase[]>(
@@ -1027,7 +1024,7 @@ export default function PracticeBot() {
       // Auto-save judge sessions for signed-in users (whether or not the
       // round is still "active" — a user may End the round before pulling
       // their RFD and the saved record should still capture the result).
-      if (useJudge && isSignedIn) {
+      if (useJudge && user) {
         try {
           const saveRes = await fetch("/api/practice/judge-sessions", {
             method: "POST",
@@ -1200,7 +1197,7 @@ export default function PracticeBot() {
 
   /* ---------- save round to "My Practice" ---------- */
   async function saveRoundToHistory() {
-    if (!isSignedIn || savingToHistory || history.length === 0) return;
+    if (!user || savingToHistory || history.length === 0) return;
     if (savedSessionId) return;
     setSavingToHistory(true);
     try {
@@ -1760,29 +1757,6 @@ export default function PracticeBot() {
           </div>
         </div>
       </section>
-
-      {!user && (
-        <section className="container mx-auto max-w-5xl px-4 pt-6">
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.3 }}
-            className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl bg-gradient-to-r from-accent/10 via-accent/5 to-transparent border border-accent/25 text-sm"
-            data-testid="banner-signin-cta"
-          >
-            <span className="text-foreground/80">
-              <span className="font-semibold text-foreground">Want to save your progress?</span> Sign in to keep transcripts, feedback scores, and replays after every round.
-            </span>
-            <Link
-              href="/signin"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-accent text-white font-semibold hover:bg-accent/90 transition-colors whitespace-nowrap"
-              data-testid="link-signin-cta"
-            >
-              <LogIn className="w-3.5 h-3.5" /> Sign in
-            </Link>
-          </motion.div>
-        </section>
-      )}
 
       <section id="round-setup" className="container mx-auto max-w-5xl px-4 py-6 grid lg:grid-cols-3 gap-6 scroll-mt-24">
         {/* LEFT: tabbed practice flow */}
@@ -2774,22 +2748,7 @@ export default function PracticeBot() {
                 </div>
               </div>
 
-              {!isSignedIn ? (
-                <div
-                  className="rounded-lg bg-muted/50 border border-border p-4 flex flex-col sm:flex-row sm:items-center gap-3"
-                  data-testid="prompt-signin-save"
-                >
-                  <div className="text-sm text-foreground/85 flex-1">
-                    Sign in to save your transcript, recording, and scorecard so
-                    you can review them later.
-                  </div>
-                  <Link href="/signin" data-testid="link-signin-save">
-                    <Button className="bg-accent hover:bg-accent/90 text-white">
-                      <LogIn className="w-4 h-4 mr-2" /> Sign in to save
-                    </Button>
-                  </Link>
-                </div>
-              ) : savedSessionId ? (
+              {savedSessionId ? (
                 <div
                   className="flex flex-col sm:flex-row sm:items-center gap-3"
                   data-testid="state-saved-history"
@@ -2809,7 +2768,7 @@ export default function PracticeBot() {
                 <Button
                   data-testid="button-save-history"
                   onClick={saveRoundToHistory}
-                  disabled={savingToHistory}
+                   disabled={savingToHistory || !user}
                   className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
                 >
                   {savingToHistory ? (
@@ -3440,11 +3399,6 @@ export default function PracticeBot() {
                         className="mt-4 text-[11px] text-emerald-600 flex items-center gap-1.5"
                       >
                         <Check className="w-3 h-3" /> Round saved to your history.
-                      </div>
-                    )}
-                    {judgeRoundActive && !isSignedIn && (
-                      <div className="mt-4 text-[11px] text-muted-foreground">
-                        Sign in to save this round to your history.
                       </div>
                     )}
                   </div>

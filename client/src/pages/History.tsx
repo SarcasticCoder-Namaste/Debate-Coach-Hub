@@ -18,7 +18,6 @@ import {
   Mic,
   Calendar,
   ArrowRight,
-  LogIn,
   Film,
 } from "lucide-react";
 import {
@@ -48,6 +47,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { motion, AnimatePresence } from "framer-motion";
+import { useVisitorSession } from "@/hooks/use-visitor-session";
 import type { FeedbackReport, PracticeTurn } from "@shared/schema";
 
 type SessionListItem = {
@@ -111,45 +111,14 @@ function computeStreak(rows: SessionListItem[]): number {
   return streak;
 }
 
-function SignedOutPrompt() {
-  return (
-    <div className="min-h-screen bg-background font-body text-foreground">
-      <Navigation />
-      <section className="pt-32 pb-16 px-4">
-        <div className="container mx-auto max-w-2xl">
-          <Card className="p-8 text-center" data-testid="card-history-signin">
-            <div className="w-14 h-14 mx-auto rounded-2xl bg-accent/10 text-accent flex items-center justify-center mb-4">
-              <Trophy className="w-7 h-7" />
-            </div>
-            <h1 className="font-display text-3xl font-bold text-primary mb-2">
-              Save your practice progress
-            </h1>
-            <p className="text-muted-foreground mb-6">
-              Sign in to save every practice round, track your score over time,
-              and re-watch your speeches whenever you want.
-            </p>
-            <Link href="/signin" data-testid="link-signin-history">
-              <Button className="bg-accent hover:bg-accent/90 text-white">
-                <LogIn className="w-4 h-4 mr-2" /> Sign in to view your dashboard
-              </Button>
-            </Link>
-          </Card>
-        </div>
-      </section>
-    </div>
-  );
-}
-
 export default function History() {
   const { toast } = useToast();
 
-  const sessionAuth = useQuery<{ email: string | null; signedIn: boolean }>({
-    queryKey: ["/api/auth/session"],
-  });
+  const { user, isLoading: sessionLoading } = useVisitorSession();
 
   const list = useQuery<{ sessions: SessionListItem[] }>({
     queryKey: ["/api/practice/sessions"],
-    enabled: !!sessionAuth.data?.signedIn,
+    enabled: !!user,
   });
 
   const [openId, setOpenId] = useState<string | null>(null);
@@ -224,7 +193,7 @@ export default function History() {
       }));
   }, [sessions]);
 
-  if (sessionAuth.isLoading) {
+  if (sessionLoading) {
     return (
       <div className="min-h-screen bg-background font-body text-foreground">
         <Navigation />
@@ -233,10 +202,6 @@ export default function History() {
         </div>
       </div>
     );
-  }
-
-  if (!sessionAuth.data?.signedIn) {
-    return <SignedOutPrompt />;
   }
 
   return (

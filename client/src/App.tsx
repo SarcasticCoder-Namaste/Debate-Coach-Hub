@@ -61,11 +61,15 @@ function Router() {
   );
 }
 
-function App() {
+function SessionBootstrap() {
   useVisitorSession();
+  return null;
+}
 
+function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <SessionBootstrap />
       <ThemeProvider>
         <TooltipProvider>
           <Toaster />

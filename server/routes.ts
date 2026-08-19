@@ -325,7 +325,7 @@ export async function registerRoutes(
   app.post("/api/practice/rounds", async (req: Request, res: Response) => {
     const parsed = savePracticeRoundSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "Invalid round data" });
-    if (!req.session.userId) return res.status(401).json({ error: "Sign in to save rounds" });
+    if (!req.session.userId) return res.status(401).json({ error: "Session required to save rounds" });
     try {
       const round = await storage.createPracticeRound(req.session.userId, {
         topic: parsed.data.topic,

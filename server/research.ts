@@ -73,7 +73,7 @@ async function effectiveOwner(req: Request, res: Response): Promise<string> {
       await storage.claimResearchForUser(anon, account);
       await storage.claimResearchForUser(legacy, account);
     } catch (err) {
-      console.warn("[research] claim on sign-in failed:", (err as Error).message);
+      console.warn("[research] claim on session start failed:", (err as Error).message);
     }
     return account;
   }

@@ -88,7 +88,7 @@ export default function AdminLeads() {
           <Card className="p-6">
             <div className="flex items-center gap-2 mb-3">
               <ShieldCheck className="w-5 h-5 text-accent" />
-              <h1 className="font-display text-xl font-bold text-primary">Admin sign-in</h1>
+              <h1 className="font-display text-xl font-bold text-primary">Admin access</h1>
             </div>
             <p className="text-sm text-muted-foreground mb-4">
               Enter the admin token to view coaching leads. Default token for the demo is
@@ -104,7 +104,7 @@ export default function AdminLeads() {
                 className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
               <Button type="submit" data-testid="button-admin-signin" className="w-full bg-primary">
-                Sign in
+                Continue
               </Button>
             </form>
           </Card>
