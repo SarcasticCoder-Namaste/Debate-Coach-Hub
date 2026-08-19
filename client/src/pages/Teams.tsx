@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/hooks/use-auth";
+import { useVisitorSession } from "@/hooks/use-visitor-session";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Loader2, Users, Plus, ArrowRight, GraduationCap, ClipboardCheck } from "lucide-react";
@@ -36,7 +36,7 @@ type Assignment = {
 };
 
 export default function Teams() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading } = useVisitorSession();
   const { toast } = useToast();
   const [name, setName] = useState("");
   const [joinCode, setJoinCode] = useState("");

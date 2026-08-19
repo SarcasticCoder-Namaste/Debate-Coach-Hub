@@ -5,7 +5,7 @@ import { Navigation } from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { useAuth } from "@/hooks/use-auth";
+import { useVisitorSession } from "@/hooks/use-visitor-session";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Loader2, ArrowLeft, MessageSquare } from "lucide-react";
@@ -26,7 +26,7 @@ type RoundData = {
 };
 
 export default function TeamSession() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading } = useVisitorSession();
   const [, params] = useRoute<{ id: string; roundId: string }>("/teams/:id/sessions/:roundId");
   const teamId = Number(params?.id);
   const roundId = Number(params?.roundId);

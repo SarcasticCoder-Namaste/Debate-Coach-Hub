@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { useVisitorSession } from "@/hooks/use-visitor-session";
 import {
   Loader2,
   ArrowLeft,
@@ -58,18 +59,15 @@ function fmtTime(sec: number): string {
 }
 
 export default function ClipEditor() {
+  const { user, isLoading: sessionLoading } = useVisitorSession();
   const [, params] = useRoute("/clips/new/:sessionId");
   const sessionId = params?.sessionId;
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
-  const sessionAuth = useQuery<{ email: string | null; signedIn: boolean }>({
-    queryKey: ["/api/auth/session"],
-  });
-
   const detail = useQuery<SessionDetail>({
     queryKey: ["/api/practice/sessions", sessionId],
-    enabled: !!sessionId && !!sessionAuth.data?.signedIn,
+    enabled: !!sessionId && !!user,
   });
 
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
@@ -253,7 +251,7 @@ export default function ClipEditor() {
     }
   }
 
-  if (sessionAuth.isLoading) {
+  if (sessionLoading || !user) {
     return (
       <div className="min-h-screen bg-background"><Navigation />
         <div className="pt-32 px-4 container mx-auto flex items-center gap-2 text-muted-foreground">
@@ -262,20 +260,6 @@ export default function ClipEditor() {
       </div>
     );
   }
-  if (!sessionAuth.data?.signedIn) {
-    return (
-      <div className="min-h-screen bg-background"><Navigation />
-        <section className="pt-32 px-4 container mx-auto max-w-xl">
-          <Card className="p-6">
-            <h1 className="font-display text-xl font-bold text-primary mb-2">Sign in to create clips</h1>
-            <p className="text-sm text-muted-foreground mb-4">Highlight clips are tied to your saved practice sessions.</p>
-            <Link href="/signin"><Button>Sign in</Button></Link>
-          </Card>
-        </section>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-background font-body text-foreground" data-testid="page-clip-editor">
       <Navigation />

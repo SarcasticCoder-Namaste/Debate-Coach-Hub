@@ -4,7 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Navigation } from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { useAuth } from "@/hooks/use-auth";
+import { useVisitorSession } from "@/hooks/use-visitor-session";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Loader2, Users } from "lucide-react";
@@ -12,7 +12,7 @@ import { Loader2, Users } from "lucide-react";
 export default function TeamJoin() {
   const [, params] = useRoute<{ code: string }>("/teams/join/:code");
   const code = params?.code || "";
-  const { user, isLoading } = useAuth();
+  const { user, isLoading } = useVisitorSession();
   const [, navigate] = useLocation();
   const { toast } = useToast();
 

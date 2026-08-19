@@ -1,27 +1,19 @@
 import { useState, useEffect } from "react";
-import { Menu, X, Sun, Moon, Monitor, LogIn, LogOut, Mic, Library, History as HistoryIcon, Tag, Crown, Search, LayoutDashboard, CalendarDays, Trophy, Zap, Users } from "lucide-react";
+import { Menu, X, Sun, Moon, Monitor, Mic, Library, Tag, Crown, Search, LayoutDashboard, CalendarDays, Trophy, Zap, Users } from "lucide-react";
 import { LogoMark } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/ThemeProvider";
 import { Link, useLocation } from "wouter";
-import { useAuth } from "@/hooks/use-auth";
 import { useCurrentSubscription } from "@/lib/plan";
-import { useQuery } from "@tanstack/react-query";
 
 export function Navigation() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { theme, setTheme, resolved } = useTheme();
   const [location, navigate] = useLocation();
-  const { user, signOut } = useAuth();
   const onHome = location === "/";
   const { plan, subscription } = useCurrentSubscription();
   const onPaidPlan = subscription?.status === "active" && plan.id !== "free";
-  const sessionAuth = useQuery<{ email: string | null; signedIn: boolean }>({
-    queryKey: ["/api/auth/session"],
-  });
-  const signedIn = !!sessionAuth.data?.signedIn;
-
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
     window.addEventListener("scroll", handleScroll);
@@ -154,33 +146,29 @@ export function Navigation() {
             <Mic className="w-3.5 h-3.5" /> Practice
           </Link>
 
-          {signedIn && (
-            <Link
-              href="/teams"
-              data-testid="nav-link-teams"
-              className={`inline-flex items-center gap-1.5 text-sm font-semibold transition-colors ${
-                isDarkHero
-                  ? "text-white/90 hover:text-white"
-                  : "text-foreground/80 hover:text-foreground"
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" /> Teams
-            </Link>
-          )}
+          <Link
+            href="/teams"
+            data-testid="nav-link-teams"
+            className={`inline-flex items-center gap-1.5 text-sm font-semibold transition-colors ${
+              isDarkHero
+                ? "text-white/90 hover:text-white"
+                : "text-foreground/80 hover:text-foreground"
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" /> Teams
+          </Link>
 
-          {signedIn && (
-            <Link
-              href="/history"
-              data-testid="nav-link-history"
-              className={`inline-flex items-center gap-1.5 text-sm font-semibold transition-colors ${
-                isDarkHero
-                  ? "text-white/90 hover:text-white"
-                  : "text-foreground/80 hover:text-foreground"
-              }`}
-            >
-              <Trophy className="w-3.5 h-3.5" /> My Practice
-            </Link>
-          )}
+          <Link
+            href="/history"
+            data-testid="nav-link-history"
+            className={`inline-flex items-center gap-1.5 text-sm font-semibold transition-colors ${
+              isDarkHero
+                ? "text-white/90 hover:text-white"
+                : "text-foreground/80 hover:text-foreground"
+            }`}
+          >
+            <Trophy className="w-3.5 h-3.5" /> My Practice
+          </Link>
 
           <Link
             href="/pricing"
@@ -223,30 +211,6 @@ export function Navigation() {
               <Monitor className="w-4 h-4" />
             </button>
           </div>
-
-          {user ? (
-            <button
-              onClick={() => signOut.mutate()}
-              data-testid="button-signout"
-              className={`text-sm font-medium hover:text-accent transition-colors flex items-center gap-1.5 ${
-                isDarkHero ? "text-white/90 hover:text-white" : "text-foreground/80 hover:text-foreground"
-              }`}
-            >
-              <LogOut className="w-4 h-4" />
-              Sign Out
-            </button>
-          ) : (
-            <Link
-              href="/signin"
-              data-testid="link-signin"
-              className={`text-sm font-medium hover:text-accent transition-colors flex items-center gap-1.5 ${
-                isDarkHero ? "text-white/90 hover:text-white" : "text-foreground/80 hover:text-foreground"
-              }`}
-            >
-              <LogIn className="w-4 h-4" />
-              Sign In
-            </Link>
-          )}
 
           <Button
             data-testid="button-start-free"
@@ -355,16 +319,14 @@ export function Navigation() {
           >
             <Mic className="w-4 h-4" /> Practice Bot
           </Link>
-          {signedIn && (
-            <Link
-              href="/history"
-              data-testid="button-nav-history"
-              onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center gap-2 text-left text-lg font-semibold text-foreground py-2 border-b border-border/50"
-            >
-              <Trophy className="w-4 h-4" /> My Practice
-            </Link>
-          )}
+          <Link
+            href="/history"
+            data-testid="button-nav-history"
+            onClick={() => setMobileMenuOpen(false)}
+            className="flex items-center gap-2 text-left text-lg font-semibold text-foreground py-2 border-b border-border/50"
+          >
+            <Trophy className="w-4 h-4" /> My Practice
+          </Link>
           <Link
             href="/pricing"
             data-testid="button-nav-pricing"
@@ -386,26 +348,6 @@ export function Navigation() {
           >
             <CalendarDays className="w-4 h-4" /> Book a Coach
           </Link>
-          {user ? (
-            <button
-              onClick={() => { setMobileMenuOpen(false); signOut.mutate(); }}
-              data-testid="button-mobile-signout"
-              className="w-full mt-2 inline-flex items-center justify-center h-10 rounded-md border border-border bg-background text-foreground text-sm font-medium hover:bg-muted transition-colors"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Sign Out
-            </button>
-          ) : (
-            <Link
-              href="/signin"
-              data-testid="link-mobile-signin"
-              onClick={() => setMobileMenuOpen(false)}
-              className="w-full mt-2 inline-flex items-center justify-center h-10 rounded-md border border-border bg-background text-foreground text-sm font-medium hover:bg-muted transition-colors"
-            >
-              <LogIn className="w-4 h-4 mr-2" />
-              Sign In
-            </Link>
-          )}
           <Button
             data-testid="button-book-session"
             className="w-full bg-accent text-white shadow-lg shadow-accent/25"

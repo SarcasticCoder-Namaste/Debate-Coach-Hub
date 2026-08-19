@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useAuth } from "@/hooks/use-auth";
+import { useVisitorSession } from "@/hooks/use-visitor-session";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
@@ -76,7 +76,7 @@ type TeamDetail = {
 };
 
 export default function TeamDetail() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading } = useVisitorSession();
   const [, params] = useRoute<{ id: string }>("/teams/:id");
   const teamId = Number(params?.id);
   const { toast } = useToast();

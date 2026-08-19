@@ -91,9 +91,6 @@ export default function Drills() {
   const { data: daily } = useQuery<DailyDrill>({
     queryKey: ["/api/drills/daily"],
   });
-  const { data: session } = useQuery<{ signedIn: boolean; email: string | null }>({
-    queryKey: ["/api/auth/session"],
-  });
 
   const [streak, setStreak] = useState<StreakState>({ count: 0, lastDate: "" });
   useEffect(() => {
@@ -107,7 +104,6 @@ export default function Drills() {
     };
   }, []);
 
-  const signedIn = !!session?.signedIn;
   const completedToday = streak.lastDate === todayKey();
 
   return (
@@ -263,26 +259,6 @@ export default function Drills() {
           </div>
         </div>
 
-        {!signedIn && (
-          <Card className="p-5 bg-muted/40 border-dashed">
-            <div className="flex items-start gap-3">
-              <Flame className="w-5 h-5 text-accent mt-0.5" />
-              <div className="flex-1">
-                <p className="text-sm text-foreground font-medium">
-                  Sign in to track your daily drill streak.
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Your streak counts each day you finish at least one drill.
-                </p>
-              </div>
-              <Link href="/signin">
-                <Button size="sm" variant="outline" data-testid="button-streak-signin">
-                  Sign in
-                </Button>
-              </Link>
-            </div>
-          </Card>
-        )}
       </section>
     </div>
   );
